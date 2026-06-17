@@ -1,3 +1,4 @@
+import os
 import sqlite3
 from pathlib import Path
 from datetime import date, datetime, timedelta
@@ -5,7 +6,7 @@ import pandas as pd
 import streamlit as st
 
 APP_TITLE = "Fixool Site OS Light"
-DB_PATH = Path(__file__).with_name("fixool_site_os.db")
+DB_PATH = Path(os.environ.get("FIXOOL_DB_PATH", Path(__file__).with_name("fixool_site_os.db")))
 STATI_ATTIVITA = ["Da fare", "In corso", "Bloccata", "Completata", "Verificata"]
 STATI_TICKET = ["Aperto", "In gestione", "Bloccante", "Risolto", "Chiuso"]
 PRIORITA = ["Bassa", "Media", "Alta", "Critica"]
@@ -39,7 +40,49 @@ FASI_STANDARD = [
 st.set_page_config(page_title=APP_TITLE, page_icon="🏗️", layout="wide")
 
 
+
+def get_app_secret(key: str, default: str = "") -> str:
+    """Read a secret from Streamlit secrets, then environment, then default."""
+    try:
+        value = st.secrets.get(key, None)
+        if value is not None:
+            return str(value)
+    except Exception:
+        pass
+    return os.environ.get(key, default)
+
+
+def require_password() -> bool:
+    """Very light access gate for the MVP.
+
+    For Streamlit Cloud set APP_PASSWORD in App secrets.
+    For local tests you can use the default password: fixool2026.
+    This is not a full user-management system; it is only a simple pilot gate.
+    """
+    app_password = get_app_secret("APP_PASSWORD", "fixool2026")
+    if not app_password:
+        return True
+
+    if st.session_state.get("fixool_authenticated"):
+        return True
+
+    st.title("🏗️ Fixool Site OS Light")
+    st.subheader("Accesso pilota")
+    st.caption("Inserisci la password condivisa dal team Fixool.")
+    with st.form("login_form"):
+        password = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Entra")
+    if submitted:
+        if password == app_password:
+            st.session_state["fixool_authenticated"] = True
+            st.rerun()
+        else:
+            st.error("Password non corretta.")
+    return False
+
+
 def connect():
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     return sqlite3.connect(DB_PATH, check_same_thread=False)
 
 
@@ -265,7 +308,7 @@ def kpi_cards(cantiere_id=None):
     total_att = len(att)
     completate = int(att["stato"].isin(["Completata", "Verificata"]).sum()) if total_att else 0
     bloccate = int(att["stato"].eq("Bloccata").sum()) if total_att else 0
-    ticket_aperti = int(~tic["stato"].isin(["Risolto", "Chiuso"]).sum()) if len(tic) else 0
+    ticket_aperti = int((~tic["stato"].isin(["Risolto", "Chiuso"])).sum()) if len(tic) else 0
     ticket_bloccanti = int(tic["stato"].eq("Bloccante").sum()) if len(tic) else 0
     overdue = 0
     if total_att:
@@ -641,6 +684,9 @@ def page_report():
 def page_export():
     st.header("Export dati")
     st.caption("Esporta i dati del pilota per analisi, backup o condivisione.")
+    if DB_PATH.exists():
+        st.download_button("Scarica backup database completo (.db)", data=DB_PATH.read_bytes(), file_name="fixool_site_os_backup.db", mime="application/octet-stream")
+    st.markdown("---")
     tables = ["cantieri", "artigiani", "attivita", "ticket", "aggiornamenti"]
     for table in tables:
         df = query_df(f"SELECT * FROM {table}")
@@ -653,6 +699,13 @@ def page_export():
 def page_settings():
     st.header("Impostazioni pilota")
     st.warning("Usare con attenzione: queste azioni modificano il database locale.")
+    uploaded_db = st.file_uploader("Ripristina backup database (.db)", type=["db", "sqlite", "sqlite3"])
+    if uploaded_db is not None and st.button("Carica backup e sostituisci database attuale"):
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        DB_PATH.write_bytes(uploaded_db.getbuffer())
+        st.success("Backup ripristinato. Ricarico l'app.")
+        st.rerun()
+    st.markdown("---")
     if st.button("Carica dati demo", type="secondary"):
         seed_demo_data()
         st.success("Dati demo caricati se il database era vuoto.")
@@ -667,12 +720,15 @@ def page_settings():
 
 
 def main():
+    if not require_password():
+        return
     init_db()
     if "initialized" not in st.session_state:
         seed_demo_data()
         st.session_state["initialized"] = True
     st.sidebar.title("🏗️ Fixool Site OS Light")
-    st.sidebar.caption("MVP per coordinamento cantieri")
+    st.sidebar.caption("MVP cloud-ready per coordinamento cantieri")
+    st.sidebar.caption(f"Database: {DB_PATH.name}")
     page = st.sidebar.radio(
         "Menu",
         [
