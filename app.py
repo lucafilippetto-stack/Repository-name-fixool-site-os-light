@@ -324,6 +324,47 @@ def kpi_cards(cantiere_id=None):
         st.warning(f"Attenzione: ci sono {ticket_bloccanti} ticket bloccanti aperti.")
 
 
+
+def render_attivita_table(att_df, title=None):
+    """Render activities with a graphical progress bar."""
+    if title:
+        st.subheader(title)
+    if att_df is None or len(att_df) == 0:
+        st.info("Nessuna attività presente per il filtro selezionato.")
+        return
+
+    display_df = att_df.copy()
+    if "percentuale" in display_df.columns:
+        display_df["percentuale"] = pd.to_numeric(display_df["percentuale"], errors="coerce").fillna(0).clip(0, 100).astype(int)
+
+    st.dataframe(
+        display_df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "percentuale": st.column_config.ProgressColumn(
+                "Avanzamento",
+                help="Percentuale di avanzamento del task",
+                min_value=0,
+                max_value=100,
+                format="%d%%",
+            )
+        },
+    )
+
+
+def progress_from_status(stato, percentuale):
+    """Keep progress coherent with terminal statuses while preserving manual control."""
+    try:
+        pct = int(percentuale or 0)
+    except Exception:
+        pct = 0
+    pct = max(0, min(100, pct))
+    if stato in ["Completata", "Verificata"]:
+        return 100
+    return pct
+
+
 def page_dashboard():
     st.header("Dashboard operativa")
     cantieri_map = get_cantieri_options()
@@ -357,17 +398,31 @@ def page_dashboard():
     else:
         st.info("Non ci sono ancora attività inserite.")
 
+    att_where = "" if cantiere_id is None else "WHERE a.cantiere_id = ?"
+    att_progress = query_df(
+        f"""
+        SELECT a.id, c.nome AS cantiere, a.fase, a.titolo, a.assegnato_a, a.stato, a.priorita, a.scadenza, a.percentuale
+        FROM attivita a
+        JOIN cantieri c ON c.id = a.cantiere_id
+        {att_where}
+        ORDER BY a.scadenza, a.id
+        """,
+        params,
+    )
+    render_attivita_table(att_progress, "Avanzamento attività")
+
     st.subheader("Prossime attività in scadenza")
+    prossime_where = "" if cantiere_id is None else "AND a.cantiere_id = ?"
     prossime = query_df(
         f"""
-        SELECT a.id, c.nome AS cantiere, a.fase, a.titolo, a.assegnato_a, a.stato, a.priorita, a.scadenza
+        SELECT a.id, c.nome AS cantiere, a.fase, a.titolo, a.assegnato_a, a.stato, a.priorita, a.scadenza, a.percentuale
         FROM attivita a JOIN cantieri c ON c.id = a.cantiere_id
-        {where + (' AND ' if where else 'WHERE ')} a.stato NOT IN ('Completata','Verificata')
+        WHERE a.stato NOT IN ('Completata','Verificata') {prossime_where}
         ORDER BY a.scadenza LIMIT 20
         """,
         params,
     )
-    st.dataframe(prossime, use_container_width=True, hide_index=True)
+    render_attivita_table(prossime)
 
 
 def page_cantieri():
@@ -436,7 +491,7 @@ def page_attivita():
     cantiere_id = cantieri_map[selected]
     kpi_cards(cantiere_id)
 
-    tab1, tab2 = st.tabs(["Nuova attività", "Aggiorna attività"])
+    tab1, tab2 = st.tabs(["Nuova attività", "Aggiorna / monitora attività"])
     with tab1:
         with st.form("new_attivita"):
             col1, col2 = st.columns(2)
@@ -458,10 +513,11 @@ def page_attivita():
             if not titolo.strip():
                 st.error("Inserisci il titolo dell'attività.")
             else:
+                percentuale_finale = progress_from_status(stato, percentuale)
                 execute(
                     """INSERT INTO attivita(cantiere_id, fase, titolo, descrizione, assegnato_a, dipende_da_id, stato, priorita, scadenza, percentuale, note)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (cantiere_id, fase, titolo.strip(), descrizione, assegnato, dip_options[dip_label], stato, priorita, str(scadenza), percentuale, note),
+                    (cantiere_id, fase, titolo.strip(), descrizione, assegnato, dip_options[dip_label], stato, priorita, str(scadenza), percentuale_finale, note),
                 )
                 st.success("Attività creata.")
                 st.rerun()
@@ -471,11 +527,15 @@ def page_attivita():
             "SELECT id, fase, titolo, assegnato_a, stato, priorita, scadenza, percentuale, note FROM attivita WHERE cantiere_id = ? ORDER BY scadenza, id",
             (cantiere_id,),
         )
-        st.dataframe(att_df, use_container_width=True, hide_index=True)
+        render_attivita_table(att_df)
         if len(att_df):
             act_label = st.selectbox("Seleziona attività da aggiornare", [f"{row.id} - {row.titolo}" for row in att_df.itertuples()])
             act_id = int(act_label.split(" - ")[0])
             row = query_df("SELECT * FROM attivita WHERE id = ?", (act_id,)).iloc[0]
+            pct_attuale = max(0, min(100, int(row["percentuale"] or 0)))
+            st.markdown("**Avanzamento grafico del task selezionato**")
+            st.progress(pct_attuale)
+            st.caption(f"Avanzamento attuale: {pct_attuale}%")
             with st.form("update_attivita"):
                 col1, col2, col3 = st.columns(3)
                 nuovo_stato = col1.selectbox("Nuovo stato", STATI_ATTIVITA, index=STATI_ATTIVITA.index(row["stato"]) if row["stato"] in STATI_ATTIVITA else 0)
@@ -484,7 +544,8 @@ def page_attivita():
                 nuove_note = st.text_area("Note", value=row["note"] or "")
                 submitted = st.form_submit_button("Aggiorna attività")
             if submitted:
-                execute("UPDATE attivita SET stato = ?, priorita = ?, percentuale = ?, note = ? WHERE id = ?", (nuovo_stato, nuova_prio, nuova_pct, nuove_note, act_id))
+                nuova_pct_finale = progress_from_status(nuovo_stato, nuova_pct)
+                execute("UPDATE attivita SET stato = ?, priorita = ?, percentuale = ?, note = ? WHERE id = ?", (nuovo_stato, nuova_prio, nuova_pct_finale, nuove_note, act_id))
                 update_closed_at("attivita", act_id, nuovo_stato)
                 st.success("Attività aggiornata.")
                 st.rerun()
@@ -616,7 +677,18 @@ def make_daily_report(cantiere_id):
     def bullet(df, col="titolo", max_items=6):
         if df is None or len(df) == 0:
             return "- Nessuno"
-        return "\n".join([f"- {row[col]}" for _, row in df.head(max_items).iterrows()])
+        lines = []
+        for _, row in df.head(max_items).iterrows():
+            if "percentuale" in df.columns:
+                try:
+                    pct = int(row.get("percentuale") or 0)
+                    lines.append(f"- {row[col]} ({pct}%)")
+                except Exception:
+                    lines.append(f"- {row[col]}")
+            else:
+                lines.append(f"- {row[col]}")
+        return "\n".join(lines)
+
 
     report = f"""REPORT GIORNALIERO FIXOOL - {date.today().strftime('%d/%m/%Y')}
 
