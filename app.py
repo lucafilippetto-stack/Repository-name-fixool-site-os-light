@@ -365,6 +365,92 @@ def progress_from_status(stato, percentuale):
     return pct
 
 
+def compute_cantiere_progress(cantiere_id):
+    """Calculate overall site progress as the average progress of its activities.
+
+    The MVP uses a simple and transparent rule: each task has the same weight.
+    Completed or verified tasks are forced to 100%; all other tasks use the
+    manual percentage set by the capo cantiere.
+    """
+    att = query_df("SELECT stato, percentuale FROM attivita WHERE cantiere_id = ?", (cantiere_id,))
+    if att is None or len(att) == 0:
+        return 0, 0, 0, 0, 0
+    pct_values = []
+    for _, row in att.iterrows():
+        pct_values.append(progress_from_status(row.get("stato"), row.get("percentuale")))
+    overall = int(round(sum(pct_values) / len(pct_values))) if pct_values else 0
+    completate = int(att["stato"].isin(["Completata", "Verificata"]).sum())
+    bloccate = int(att["stato"].eq("Bloccata").sum())
+    in_corso = int(att["stato"].eq("In corso").sum())
+    return overall, len(att), completate, in_corso, bloccate
+
+
+def cantiere_progress_label(percentuale):
+    try:
+        pct = int(percentuale or 0)
+    except Exception:
+        pct = 0
+    if pct >= 100:
+        return "Completato"
+    if pct >= 80:
+        return "Fase finale"
+    if pct >= 50:
+        return "Avanzamento intermedio"
+    if pct >= 20:
+        return "Avviato"
+    return "In partenza"
+
+
+def text_progress_bar(percentuale, blocks=10):
+    """Copyable progress bar for WhatsApp/email/client reports."""
+    try:
+        pct = max(0, min(100, int(percentuale or 0)))
+    except Exception:
+        pct = 0
+    filled = round(pct / 100 * blocks)
+    return "█" * filled + "░" * (blocks - filled)
+
+
+def render_cantiere_progress(cantiere_id, title="Avanzamento generale cantiere"):
+    """Render a graphical overall progress bar for a single site."""
+    pct, total, completate, in_corso, bloccate = compute_cantiere_progress(cantiere_id)
+    st.subheader(title)
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Avanzamento", f"{pct}%")
+    col2.metric("Attività totali", total)
+    col3.metric("Completate", completate)
+    col4.metric("Bloccate", bloccate)
+    st.progress(pct)
+    st.caption(f"Stato sintetico: {cantiere_progress_label(pct)}. Calcolo basato sulla media delle percentuali di avanzamento delle attività del cantiere.")
+    if bloccate:
+        st.warning(f"Ci sono {bloccate} attività bloccate: verificare impatto su tempi e sequenza lavori.")
+    return pct, total, completate, in_corso, bloccate
+
+
+def get_cantieri_progress_df(cantiere_id=None):
+    """Return progress summary for one or all sites, suitable for a dataframe with ProgressColumn."""
+    where = "" if cantiere_id is None else "WHERE id = ?"
+    params = () if cantiere_id is None else (cantiere_id,)
+    cantieri = query_df(f"SELECT id, nome, cliente, capo_cantiere, stato FROM cantieri {where} ORDER BY created_at DESC", params)
+    rows = []
+    for _, c in cantieri.iterrows():
+        pct, total, completate, in_corso, bloccate = compute_cantiere_progress(int(c["id"]))
+        rows.append({
+            "id": int(c["id"]),
+            "cantiere": c["nome"],
+            "cliente": c.get("cliente") or "",
+            "capo_cantiere": c.get("capo_cantiere") or "",
+            "stato": c.get("stato") or "",
+            "avanzamento": pct,
+            "attività_totali": total,
+            "completate": completate,
+            "in_corso": in_corso,
+            "bloccate": bloccate,
+            "sintesi": cantiere_progress_label(pct),
+        })
+    return pd.DataFrame(rows)
+
+
 def page_dashboard():
     st.header("Dashboard operativa")
     cantieri_map = get_cantieri_options()
@@ -373,6 +459,29 @@ def page_dashboard():
     selected = st.selectbox("Vista", options)
     cantiere_id = None if selected == all_option else cantieri_map[selected]
     kpi_cards(cantiere_id)
+
+    if cantiere_id is not None:
+        render_cantiere_progress(cantiere_id)
+    else:
+        st.subheader("Avanzamento generale per cantiere")
+        progress_df = get_cantieri_progress_df()
+        if len(progress_df):
+            st.dataframe(
+                progress_df,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "avanzamento": st.column_config.ProgressColumn(
+                        "Avanzamento",
+                        help="Avanzamento medio delle attività del cantiere",
+                        min_value=0,
+                        max_value=100,
+                        format="%d%%",
+                    )
+                },
+            )
+        else:
+            st.info("Non ci sono ancora cantieri inseriti.")
 
     st.subheader("Ticket aperti / bloccanti")
     params = () if cantiere_id is None else (cantiere_id,)
@@ -490,6 +599,7 @@ def page_attivita():
     selected = st.selectbox("Cantiere", list(cantieri_map.keys()))
     cantiere_id = cantieri_map[selected]
     kpi_cards(cantiere_id)
+    render_cantiere_progress(cantiere_id)
 
     tab1, tab2 = st.tabs(["Nuova attività", "Aggiorna / monitora attività"])
     with tab1:
@@ -673,6 +783,9 @@ def make_daily_report(cantiere_id):
     bloccate = att[att["stato"].eq("Bloccata")] if len(att) else pd.DataFrame()
     ticket_aperti = tic[~tic["stato"].isin(["Risolto", "Chiuso"])] if len(tic) else pd.DataFrame()
     ticket_blocchi = ticket_aperti[ticket_aperti["tipo"].isin(["Blocco", "Richiesta decisione", "Richiesta materiale", "Rischio ritardo"])] if len(ticket_aperti) else pd.DataFrame()
+    avanzamento, totale_attivita, totale_completate, totale_in_corso, totale_bloccate = compute_cantiere_progress(cantiere_id)
+    barra_avanzamento = text_progress_bar(avanzamento)
+    stato_sintetico = cantiere_progress_label(avanzamento)
 
     def bullet(df, col="titolo", max_items=6):
         if df is None or len(df) == 0:
@@ -695,6 +808,10 @@ def make_daily_report(cantiere_id):
 Cantiere: {cantiere['nome']}
 Cliente: {cantiere['cliente'] or '-'}
 Capo cantiere: {cantiere['capo_cantiere'] or '-'}
+
+AVANZAMENTO GENERALE CANTIERE: {avanzamento}%
+{barra_avanzamento} {avanzamento}% - {stato_sintetico}
+Attività totali: {totale_attivita} | Completate: {totale_completate} | In corso: {totale_in_corso} | Bloccate: {totale_bloccate}
 
 1) ATTIVITÀ COMPLETATE / VERIFICATE
 {bullet(completate)}
@@ -723,6 +840,9 @@ Il cantiere è da monitorare con priorità sui blocchi aperti e sulle decisioni 
 
 Cantiere: {cantiere['nome']}
 
+Avanzamento generale: {avanzamento}%
+{barra_avanzamento} {avanzamento}% - {stato_sintetico}
+
 Avanzamento principale:
 {bullet(completate, max_items=4)}
 
@@ -745,6 +865,7 @@ def page_report():
         return
     selected = st.selectbox("Cantiere", list(cantieri_map.keys()), key="report_cantiere")
     cantiere_id = cantieri_map[selected]
+    render_cantiere_progress(cantiere_id, title="Barra avanzamento generale - cantiere selezionato")
     report, client_report = make_daily_report(cantiere_id)
     tab1, tab2 = st.tabs(["Report interno", "Versione cliente"])
     with tab1:
@@ -799,7 +920,7 @@ def main():
         seed_demo_data()
         st.session_state["initialized"] = True
     st.sidebar.title("🏗️ Fixool Site OS Light")
-    st.sidebar.caption("MVP cloud-ready per coordinamento cantieri")
+    st.sidebar.caption("MVP cloud-ready per coordinamento cantieri - Patch V4")
     st.sidebar.caption(f"Database: {DB_PATH.name}")
     page = st.sidebar.radio(
         "Menu",
