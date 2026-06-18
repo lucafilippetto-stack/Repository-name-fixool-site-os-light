@@ -37,6 +37,60 @@ FASI_STANDARD = [
     "Pulizia / consegna",
 ]
 
+
+TEMPLATE_CANTIERI = {
+    "Bagno completo": [
+        ("Sopralluogo / setup", "Sopralluogo tecnico e conferma scelte bagno", "Verifica misure, layout, vincoli e conferme cliente", "Capo cantiere", "Alta", 0, 0),
+        ("Demolizioni", "Demolizione bagno", "Rimozione sanitari, rivestimenti, pavimento e smaltimento", "Muratore", "Alta", 2, 0),
+        ("Murature / tracce", "Apertura tracce bagno", "Tracce per punti acqua, scarichi, prese e termoarredo", "Muratore", "Alta", 4, 0),
+        ("Impianto idraulico", "Predisposizione impianto idraulico", "Punti lavabo, doccia, wc, bidet e termoarredo", "Idraulico", "Alta", 6, 0),
+        ("Impianto elettrico", "Predisposizione punti elettrici bagno", "Prese, interruttori, specchio, aspirazione e luci", "Elettricista", "Media", 6, 0),
+        ("Murature / tracce", "Chiusura tracce", "Chiusura tracce dopo verifica impianti", "Muratore", "Alta", 8, 0),
+        ("Massetti / sottofondi", "Impermeabilizzazione e sottofondo", "Preparazione fondo per posa pavimenti/rivestimenti", "Muratore", "Media", 10, 0),
+        ("Pavimenti / rivestimenti", "Posa rivestimenti bagno", "Posa rivestimenti secondo scelte cliente", "Pavimentista", "Media", 14, 0),
+        ("Pavimenti / rivestimenti", "Posa pavimento bagno", "Posa pavimento e fughe", "Pavimentista", "Media", 16, 0),
+        ("Sanitari / rubinetterie", "Installazione sanitari e rubinetterie", "Montaggio sanitari, box/doccia e rubinetterie", "Idraulico", "Alta", 19, 0),
+        ("Impianto elettrico", "Installazione placche/luci bagno", "Montaggio placche, luci e verifica elettrica", "Elettricista", "Media", 20, 0),
+        ("Pulizia / consegna", "Collaudo e consegna bagno", "Verifica perdite, pulizia e consegna al cliente", "Capo cantiere", "Alta", 22, 0),
+    ],
+    "Cucina": [
+        ("Sopralluogo / setup", "Conferma layout cucina e impianti", "Verifica progetto cucina, quote, scarichi, prese e vincoli", "Capo cantiere", "Alta", 0, 0),
+        ("Demolizioni", "Demolizione/rimozione cucina esistente", "Rimozione elementi, rivestimenti e preparazione area", "Muratore", "Alta", 2, 0),
+        ("Murature / tracce", "Apertura tracce cucina", "Tracce per acqua, gas/elettrico e prese dedicate", "Muratore", "Alta", 4, 0),
+        ("Impianto idraulico", "Predisposizione acqua/scarichi cucina", "Punti lavello, lavastoviglie e scarichi", "Idraulico", "Alta", 6, 0),
+        ("Impianto elettrico", "Predisposizione prese e punti cucina", "Prese dedicate, forno, piano, frigo, luci sottopensile", "Elettricista", "Alta", 6, 0),
+        ("Murature / tracce", "Chiusura tracce cucina", "Chiusura tracce dopo verifica impianti", "Muratore", "Alta", 8, 0),
+        ("Pavimenti / rivestimenti", "Posa rivestimento cucina", "Posa rivestimento/paraschizzi", "Pavimentista", "Media", 11, 0),
+        ("Tinteggiatura", "Riprese e tinteggiatura cucina", "Riprese muri e tinteggiatura zona cucina", "Tinteggiatore", "Media", 13, 0),
+        ("Finiture", "Supporto montaggio cucina", "Verifica quote e supporto alle installazioni", "Capo cantiere", "Media", 15, 0),
+        ("Pulizia / consegna", "Collaudo impianti cucina", "Verifica elettrica/idraulica e consegna area", "Capo cantiere", "Alta", 16, 0),
+    ],
+    "Appartamento completo": [
+        ("Sopralluogo / setup", "Setup cantiere e piano lavori", "Allestimento, protezioni, piano sicurezza e conferme operative", "Capo cantiere", "Alta", 0, 0),
+        ("Demolizioni", "Demolizioni e smaltimento", "Demolizioni interne, rimozioni e smaltimento materiali", "Muratore", "Alta", 5, 0),
+        ("Murature / tracce", "Tracce e opere murarie principali", "Tracce, spostamenti e predisposizioni murarie", "Muratore", "Alta", 10, 0),
+        ("Impianto idraulico", "Impianto idraulico", "Predisposizione bagno/cucina e verifiche", "Idraulico", "Alta", 15, 0),
+        ("Impianto elettrico", "Impianto elettrico", "Quadro, linee, prese, luci e predisposizioni", "Elettricista", "Alta", 15, 0),
+        ("Cartongesso", "Cartongessi e controsoffitti", "Strutture, velette, botole e predisposizioni", "Cartongessista", "Media", 22, 0),
+        ("Massetti / sottofondi", "Massetti e sottofondi", "Preparazione piani di posa", "Muratore", "Alta", 26, 0),
+        ("Pavimenti / rivestimenti", "Posa pavimenti e rivestimenti", "Posa pavimentazioni e rivestimenti principali", "Pavimentista", "Alta", 35, 0),
+        ("Serramenti / porte", "Installazione porte/serramenti", "Montaggi porte interne e rifiniture collegate", "Serramentista", "Media", 40, 0),
+        ("Tinteggiatura", "Tinteggiatura finale", "Preparazione pareti e tinteggiatura", "Tinteggiatore", "Alta", 45, 0),
+        ("Sanitari / rubinetterie", "Montaggi finali impianti", "Sanitari, placche, luci, rubinetterie e collaudi", "Idraulico/Elettricista", "Alta", 49, 0),
+        ("Pulizia / consegna", "Pulizia finale e consegna", "Pulizia, punch list, verifiche e consegna cliente", "Capo cantiere", "Alta", 52, 0),
+    ],
+    "Ristrutturazione leggera": [
+        ("Sopralluogo / setup", "Setup e protezioni", "Protezione aree, conferme operative e piano lavori", "Capo cantiere", "Alta", 0, 0),
+        ("Demolizioni", "Rimozioni leggere", "Rimozioni puntuali e preparazione superfici", "Muratore", "Media", 2, 0),
+        ("Impianto elettrico", "Adeguamenti elettrici", "Piccoli spostamenti prese/luci e verifiche", "Elettricista", "Media", 5, 0),
+        ("Murature / tracce", "Riprese murarie", "Riprese, rasature e sistemazioni puntuali", "Muratore", "Media", 7, 0),
+        ("Pavimenti / rivestimenti", "Posa/ripresa finiture", "Interventi su pavimenti/rivestimenti o battiscopa", "Pavimentista", "Media", 10, 0),
+        ("Tinteggiatura", "Tinteggiatura", "Preparazione e tinteggiatura aree coinvolte", "Tinteggiatore", "Alta", 13, 0),
+        ("Finiture", "Finiture e ritocchi", "Ritocchi, montaggi e verifica dettagli", "Capo cantiere", "Media", 15, 0),
+        ("Pulizia / consegna", "Pulizia e consegna", "Pulizia finale e consegna cliente", "Capo cantiere", "Alta", 16, 0),
+    ],
+}
+
 st.set_page_config(page_title=APP_TITLE, page_icon="🏗️", layout="wide")
 
 
@@ -451,6 +505,146 @@ def get_cantieri_progress_df(cantiere_id=None):
     return pd.DataFrame(rows)
 
 
+
+def assess_cantiere_risk(cantiere_id):
+    """Compute an operational risk level for the site.
+
+    Transparent scoring for the MVP:
+    - critical open tickets weigh more than high priority
+    - blocking tickets/activities and overdue activities increase risk
+    - open customer decisions/material requests increase coordination risk
+    """
+    att = query_df("SELECT * FROM attivita WHERE cantiere_id = ?", (cantiere_id,))
+    tic = query_df("SELECT * FROM ticket WHERE cantiere_id = ?", (cantiere_id,))
+    open_tic = tic[~tic["stato"].isin(["Risolto", "Chiuso"])] if len(tic) else pd.DataFrame()
+    overdue = 0
+    if len(att):
+        scad = pd.to_datetime(att["scadenza"], errors="coerce")
+        overdue = int(((scad.dt.date < date.today()) & ~att["stato"].isin(["Completata", "Verificata"])).sum())
+    att_bloccate = int(att["stato"].eq("Bloccata").sum()) if len(att) else 0
+    ticket_bloccanti = int(open_tic["stato"].eq("Bloccante").sum()) if len(open_tic) else 0
+    critical = int(open_tic["priorita"].eq("Critica").sum()) if len(open_tic) else 0
+    high = int(open_tic["priorita"].eq("Alta").sum()) if len(open_tic) else 0
+    decisioni = int(open_tic["tipo"].isin(["Richiesta decisione", "Richiesta materiale"]).sum()) if len(open_tic) else 0
+    risk_tickets = int(open_tic["tipo"].isin(["Blocco", "Rischio ritardo"]).sum()) if len(open_tic) else 0
+    score = (critical * 4) + (ticket_bloccanti * 3) + (att_bloccate * 3) + (overdue * 2) + (risk_tickets * 2) + high + decisioni
+    if score >= 9:
+        level = "Rosso"
+        sintesi = "Rischio operativo alto"
+        azione = "Serve intervento immediato del capo cantiere/Fixool sui blocchi aperti."
+    elif score >= 4:
+        level = "Giallo"
+        sintesi = "Attenzione operativa"
+        azione = "Monitorare ticket, decisioni e attività critiche entro la giornata."
+    else:
+        level = "Verde"
+        sintesi = "Cantiere sotto controllo"
+        azione = "Continuare aggiornamento attività e report giornaliero."
+    motivi = []
+    if critical:
+        motivi.append(f"{critical} ticket critici")
+    if ticket_bloccanti:
+        motivi.append(f"{ticket_bloccanti} ticket bloccanti")
+    if att_bloccate:
+        motivi.append(f"{att_bloccate} attività bloccate")
+    if overdue:
+        motivi.append(f"{overdue} attività scadute")
+    if decisioni:
+        motivi.append(f"{decisioni} decisioni/materiali da confermare")
+    if not motivi:
+        motivi.append("nessun blocco rilevante aperto")
+    return {
+        "livello": level,
+        "score": score,
+        "sintesi": sintesi,
+        "azione": azione,
+        "motivi": motivi,
+        "critical": critical,
+        "ticket_bloccanti": ticket_bloccanti,
+        "attivita_bloccate": att_bloccate,
+        "scadute": overdue,
+        "decisioni": decisioni,
+    }
+
+
+def render_cantiere_risk(cantiere_id, title="Rischio operativo cantiere"):
+    risk = assess_cantiere_risk(cantiere_id)
+    st.subheader(title)
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Semaforo", risk["livello"])
+    col2.metric("Score rischio", risk["score"])
+    col3.metric("Decisioni/materiali", risk["decisioni"])
+    msg = f"{risk['sintesi']} — {', '.join(risk['motivi'])}. {risk['azione']}"
+    if risk["livello"] == "Rosso":
+        st.error(msg)
+    elif risk["livello"] == "Giallo":
+        st.warning(msg)
+    else:
+        st.success(msg)
+    return risk
+
+
+def get_next_activities(cantiere_id, max_items=5):
+    return query_df(
+        """
+        SELECT titolo, assegnato_a, stato, scadenza, percentuale
+        FROM attivita
+        WHERE cantiere_id = ? AND stato NOT IN ('Completata','Verificata')
+        ORDER BY scadenza, id
+        LIMIT ?
+        """,
+        (cantiere_id, max_items),
+    )
+
+
+def insert_template_activities(cantiere_id, template_name, start_date):
+    tasks = TEMPLATE_CANTIERI.get(template_name, [])
+    inserted = 0
+    for fase, titolo, desc, ruolo, prio, offset_days, pct in tasks:
+        execute(
+            """INSERT INTO attivita(cantiere_id, fase, titolo, descrizione, assegnato_a, dipende_da_id, stato, priorita, scadenza, percentuale, note)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                cantiere_id,
+                fase,
+                titolo,
+                desc,
+                ruolo,
+                None,
+                "Da fare",
+                prio,
+                str(start_date + timedelta(days=int(offset_days))),
+                int(pct),
+                f"Creato da template: {template_name}",
+            ),
+        )
+        inserted += 1
+    return inserted
+
+
+def page_template_cantiere():
+    st.header("Template cantiere")
+    st.caption("Crea rapidamente le attività standard di un cantiere Fixool. Serve a rendere il metodo replicabile e ridurre dimenticanze operative.")
+    cantieri_map = get_cantieri_options()
+    if not cantieri_map:
+        st.info("Crea prima un cantiere nella sezione Cantieri.")
+        return
+    selected = st.selectbox("Cantiere", list(cantieri_map.keys()), key="template_cantiere")
+    cantiere_id = cantieri_map[selected]
+    template_name = st.selectbox("Template da applicare", list(TEMPLATE_CANTIERI.keys()))
+    start_date = st.date_input("Data partenza attività template", value=date.today())
+    preview = pd.DataFrame(
+        TEMPLATE_CANTIERI[template_name],
+        columns=["fase", "titolo", "descrizione", "ruolo_suggerito", "priorità", "giorno", "avanzamento"],
+    )
+    st.subheader("Anteprima attività che verranno create")
+    st.dataframe(preview, use_container_width=True, hide_index=True)
+    st.info("Le attività verranno aggiunte al cantiere selezionato. Le dipendenze restano da rifinire manualmente nella sezione Attività.")
+    if st.button("Crea attività da template", type="primary"):
+        inserted = insert_template_activities(cantiere_id, template_name, start_date)
+        st.success(f"Create {inserted} attività dal template '{template_name}'.")
+        st.rerun()
+
 def page_dashboard():
     st.header("Dashboard operativa")
     cantieri_map = get_cantieri_options()
@@ -462,6 +656,7 @@ def page_dashboard():
 
     if cantiere_id is not None:
         render_cantiere_progress(cantiere_id)
+        render_cantiere_risk(cantiere_id)
     else:
         st.subheader("Avanzamento generale per cantiere")
         progress_df = get_cantieri_progress_df()
@@ -786,6 +981,8 @@ def make_daily_report(cantiere_id):
     avanzamento, totale_attivita, totale_completate, totale_in_corso, totale_bloccate = compute_cantiere_progress(cantiere_id)
     barra_avanzamento = text_progress_bar(avanzamento)
     stato_sintetico = cantiere_progress_label(avanzamento)
+    rischio = assess_cantiere_risk(cantiere_id)
+    prossime = get_next_activities(cantiere_id, 5)
 
     def bullet(df, col="titolo", max_items=6):
         if df is None or len(df) == 0:
@@ -813,6 +1010,10 @@ AVANZAMENTO GENERALE CANTIERE: {avanzamento}%
 {barra_avanzamento} {avanzamento}% - {stato_sintetico}
 Attività totali: {totale_attivita} | Completate: {totale_completate} | In corso: {totale_in_corso} | Bloccate: {totale_bloccate}
 
+RISCHIO OPERATIVO: {rischio['livello']} - {rischio['sintesi']}
+Motivi: {', '.join(rischio['motivi'])}
+Azione suggerita: {rischio['azione']}
+
 1) ATTIVITÀ COMPLETATE / VERIFICATE
 {bullet(completate)}
 
@@ -833,6 +1034,9 @@ Attività totali: {totale_attivita} | Completate: {totale_completate} | In corso
 - Blocchi o rischi aperti: {len(ticket_blocchi)}
 - Attività bloccate: {len(bloccate)}
 
+7) PROSSIME ATTIVITÀ DA PRESIDIARE
+{bullet(prossime, max_items=5)}
+
 Sintesi Fixool:
 Il cantiere è da monitorare con priorità sui blocchi aperti e sulle decisioni richieste. Aggiornare responsabili e scadenze entro la prossima finestra operativa.
 """
@@ -843,16 +1047,21 @@ Cantiere: {cantiere['nome']}
 Avanzamento generale: {avanzamento}%
 {barra_avanzamento} {avanzamento}% - {stato_sintetico}
 
-Avanzamento principale:
+Stato operativo: {rischio['livello']} - {rischio['sintesi']}
+
+Attività completate/verificate:
 {bullet(completate, max_items=4)}
 
 Attività in corso:
 {bullet(in_corso, max_items=4)}
 
+Prossimi passaggi previsti:
+{bullet(prossime, max_items=4)}
+
 Punti da confermare / monitorare:
 {bullet(ticket_aperti[ticket_aperti['tipo'].isin(['Richiesta decisione', 'Richiesta materiale'])] if len(ticket_aperti) else pd.DataFrame(), max_items=4)}
 
-Fixool sta presidiando le attività aperte per mantenere il corretto avanzamento del cantiere.
+Fixool sta presidiando le attività aperte per mantenere il corretto avanzamento del cantiere. Eventuali decisioni richieste verranno condivise in modo puntuale.
 """
     return report, client_report
 
@@ -866,6 +1075,7 @@ def page_report():
     selected = st.selectbox("Cantiere", list(cantieri_map.keys()), key="report_cantiere")
     cantiere_id = cantieri_map[selected]
     render_cantiere_progress(cantiere_id, title="Barra avanzamento generale - cantiere selezionato")
+    render_cantiere_risk(cantiere_id, title="Semaforo rischio operativo")
     report, client_report = make_daily_report(cantiere_id)
     tab1, tab2 = st.tabs(["Report interno", "Versione cliente"])
     with tab1:
@@ -920,7 +1130,7 @@ def main():
         seed_demo_data()
         st.session_state["initialized"] = True
     st.sidebar.title("🏗️ Fixool Site OS Light")
-    st.sidebar.caption("MVP cloud-ready per coordinamento cantieri - Patch V4")
+    st.sidebar.caption("MVP cloud-ready per coordinamento cantieri - Patch V5")
     st.sidebar.caption(f"Database: {DB_PATH.name}")
     page = st.sidebar.radio(
         "Menu",
@@ -928,6 +1138,7 @@ def main():
             "Dashboard",
             "Cantieri",
             "Artigiani",
+            "Template cantiere",
             "Attività",
             "Ticket / Assistente",
             "Report giornaliero",
@@ -945,6 +1156,8 @@ def main():
         page_cantieri()
     elif page == "Artigiani":
         page_artigiani()
+    elif page == "Template cantiere":
+        page_template_cantiere()
     elif page == "Attività":
         page_attivita()
     elif page == "Ticket / Assistente":
