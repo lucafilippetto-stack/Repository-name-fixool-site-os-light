@@ -139,6 +139,40 @@ def apply_ui_styles():
             .fixool-hero h1 {font-size:1.55rem;}
             .fixool-card-value {font-size:1.55rem;}
         }
+
+        .client-hero {
+            background: linear-gradient(135deg, #0f172a 0%, #334155 50%, #64748b 100%);
+            padding: 28px 30px;
+            border-radius: 22px;
+            color: white;
+            margin-bottom: 18px;
+            box-shadow: 0 12px 35px rgba(15,23,42,0.18);
+        }
+        .client-hero h1 {margin:0; font-size:2.1rem; line-height:1.1;}
+        .client-hero p {margin:10px 0 0 0; opacity:.92; font-size:1.04rem;}
+        .client-card {
+            background:#ffffff;
+            border:1px solid rgba(15,23,42,.08);
+            border-radius:20px;
+            padding:18px 20px;
+            min-height:122px;
+            box-shadow:0 8px 24px rgba(15,23,42,.07);
+        }
+        .client-card-label {font-size:.78rem; text-transform:uppercase; letter-spacing:.06em; color:#64748b; font-weight:750;}
+        .client-card-value {font-size:1.8rem; font-weight:800; color:#0f172a; margin-top:7px; line-height:1.15;}
+        .client-card-note {font-size:.92rem; color:#475569; margin-top:8px;}
+        .client-panel {
+            background:#f8fafc;
+            border:1px solid #e2e8f0;
+            border-radius:20px;
+            padding:18px 20px;
+            margin: 12px 0;
+        }
+        .client-section-title {font-size:1.22rem; font-weight:800; color:#0f172a; margin: 8px 0 12px 0;}
+        .client-list-item {padding:10px 12px; background:#fff; border:1px solid #e5e7eb; border-radius:12px; margin-bottom:8px;}
+        .client-budget-good {color:#166534; font-weight:800;}
+        .client-budget-watch {color:#92400e; font-weight:800;}
+        .client-budget-alert {color:#991b1b; font-weight:800;}
         </style>
         """,
         unsafe_allow_html=True,
@@ -292,6 +326,20 @@ def init_db():
             )
             """
         )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS budget_cantiere (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cantiere_id INTEGER NOT NULL UNIQUE,
+                budget_iniziale REAL DEFAULT 0,
+                costo_effettivo REAL DEFAULT 0,
+                extra_approvati REAL DEFAULT 0,
+                note_budget TEXT,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(cantiere_id) REFERENCES cantieri(id)
+            )
+            """
+        )
         conn.commit()
 
 
@@ -319,6 +367,11 @@ def seed_demo_data():
     execute("INSERT INTO artigiani(nome, ruolo, telefono, email, note) VALUES (?, ?, ?, ?, ?)", ("Sergio Elettricista", "Elettricista", "", "", "Impianto elettrico"))
     execute("INSERT INTO artigiani(nome, ruolo, telefono, email, note) VALUES (?, ?, ?, ?, ?)", ("Andrea Pavimentista", "Pavimentista", "", "", "Pavimenti e rivestimenti"))
     cantiere_id = int(query_df("SELECT id FROM cantieri LIMIT 1").iloc[0]["id"])
+    execute(
+        """INSERT OR REPLACE INTO budget_cantiere(cantiere_id, budget_iniziale, costo_effettivo, extra_approvati, note_budget, updated_at)
+           VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+        (cantiere_id, 48000, 18500, 1200, "Dati demo per report cliente budget iniziale vs effettivo."),
+    )
     attivita_demo = [
         ("Demolizioni", "Completare demolizione bagno", "Rimuovere sanitari, rivestimenti e pavimento bagno", "Luca Muratore", None, "In corso", "Alta", today + timedelta(days=2), 60),
         ("Murature / tracce", "Aprire tracce impianti bagno", "Tracce per idraulico ed elettricista", "Luca Muratore", 1, "Da fare", "Alta", today + timedelta(days=4), 0),
@@ -1136,6 +1189,364 @@ def page_report():
 
 
 
+def euro(value):
+    """Format a number in a simple Italian euro style."""
+    try:
+        n = float(value or 0)
+    except Exception:
+        n = 0.0
+    s = f"€ {n:,.0f}".replace(",", ".")
+    return s
+
+
+def get_budget_summary(cantiere_id):
+    df = query_df("SELECT * FROM budget_cantiere WHERE cantiere_id = ?", (cantiere_id,))
+    if df is None or len(df) == 0:
+        return {
+            "budget_iniziale": 0.0,
+            "costo_effettivo": 0.0,
+            "extra_approvati": 0.0,
+            "totale_aggiornato": 0.0,
+            "scostamento": 0.0,
+            "budget_consumato_pct": 0,
+            "note_budget": "",
+        }
+    row = df.iloc[0]
+    budget = float(row.get("budget_iniziale") or 0)
+    effettivo = float(row.get("costo_effettivo") or 0)
+    extra = float(row.get("extra_approvati") or 0)
+    totale = effettivo + extra
+    scostamento = totale - budget if budget else totale
+    pct = int(round((totale / budget) * 100)) if budget else 0
+    return {
+        "budget_iniziale": budget,
+        "costo_effettivo": effettivo,
+        "extra_approvati": extra,
+        "totale_aggiornato": totale,
+        "scostamento": scostamento,
+        "budget_consumato_pct": max(0, min(200, pct)),
+        "note_budget": row.get("note_budget") or "",
+    }
+
+
+def upsert_budget(cantiere_id, budget_iniziale, costo_effettivo, extra_approvati, note_budget):
+    execute(
+        """
+        INSERT INTO budget_cantiere(cantiere_id, budget_iniziale, costo_effettivo, extra_approvati, note_budget, updated_at)
+        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(cantiere_id) DO UPDATE SET
+            budget_iniziale = excluded.budget_iniziale,
+            costo_effettivo = excluded.costo_effettivo,
+            extra_approvati = excluded.extra_approvati,
+            note_budget = excluded.note_budget,
+            updated_at = CURRENT_TIMESTAMP
+        """,
+        (cantiere_id, float(budget_iniziale or 0), float(costo_effettivo or 0), float(extra_approvati or 0), note_budget),
+    )
+
+
+def client_activity_groups(cantiere_id):
+    att = query_df(
+        """
+        SELECT titolo, fase, stato, percentuale, scadenza
+        FROM attivita
+        WHERE cantiere_id = ?
+        ORDER BY scadenza, id
+        """,
+        (cantiere_id,),
+    )
+    if len(att) == 0:
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+    fatti = att[att["stato"].isin(["Completata", "Verificata"])]
+    in_corso = att[att["stato"].eq("In corso")]
+    da_fare = att[att["stato"].isin(["Da fare", "Bloccata"])]
+    bloccate = att[att["stato"].eq("Bloccata")]
+    return fatti, in_corso, da_fare, bloccate
+
+
+def render_client_card(label, value, note=""):
+    st.markdown(
+        f"""
+        <div class="client-card">
+          <div class="client-card-label">{_html_escape(label)}</div>
+          <div class="client-card-value">{_html_escape(value)}</div>
+          <div class="client-card-note">{_html_escape(note)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_client_list(title, df, empty="Nessun elemento da mostrare", max_items=6):
+    st.markdown(f"<div class='client-section-title'>{_html_escape(title)}</div>", unsafe_allow_html=True)
+    if df is None or len(df) == 0:
+        st.info(empty)
+        return
+    for _, row in df.head(max_items).iterrows():
+        pct = int(row.get("percentuale") or 0) if "percentuale" in df.columns else None
+        scad = row.get("scadenza") or ""
+        fase = row.get("fase") or ""
+        extra = f" · {pct}%" if pct is not None else ""
+        st.markdown(
+            f"""
+            <div class="client-list-item">
+              <strong>{_html_escape(row.get('titolo'))}</strong><br/>
+              <span class="small-muted">{_html_escape(fase)}{extra} {('· prevista ' + str(scad)) if scad else ''}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+def budget_status_text(summary):
+    budget = summary["budget_iniziale"]
+    totale = summary["totale_aggiornato"]
+    if not budget:
+        return "Budget da inserire", "client-budget-watch"
+    if totale <= budget:
+        return "Allineato al budget", "client-budget-good"
+    if totale <= budget * 1.1:
+        return "Scostamento da monitorare", "client-budget-watch"
+    return "Extra budget rilevante", "client-budget-alert"
+
+
+def make_client_predefined_reports(cantiere_id):
+    cantiere = query_df("SELECT * FROM cantieri WHERE id = ?", (cantiere_id,)).iloc[0]
+    progress, total, completate, in_corso_n, bloccate_n = compute_cantiere_progress(cantiere_id)
+    label = cantiere_progress_label(progress)
+    budget = get_budget_summary(cantiere_id)
+    status_budget, _ = budget_status_text(budget)
+    fatti, in_corso, da_fare, bloccate = client_activity_groups(cantiere_id)
+    tickets_cliente = query_df(
+        """
+        SELECT titolo, tipo, responsabile, priorita, scadenza
+        FROM ticket
+        WHERE cantiere_id = ?
+          AND stato NOT IN ('Risolto','Chiuso')
+          AND tipo IN ('Richiesta decisione','Richiesta materiale','Extra lavoro')
+        ORDER BY CASE priorita WHEN 'Critica' THEN 1 WHEN 'Alta' THEN 2 WHEN 'Media' THEN 3 ELSE 4 END, scadenza
+        """,
+        (cantiere_id,),
+    )
+
+    def bullet(df, col="titolo", max_items=8):
+        if df is None or len(df) == 0:
+            return "- Nessuno"
+        lines = []
+        for _, row in df.head(max_items).iterrows():
+            pct = f" ({int(row.get('percentuale') or 0)}%)" if "percentuale" in df.columns else ""
+            lines.append(f"- {row.get(col)}{pct}")
+        return "\n".join(lines)
+
+    header = f"Cantiere: {cantiere['nome']}\nData aggiornamento: {date.today().strftime('%d/%m/%Y')}"
+    avanzamento = f"""REPORT AVANZAMENTO CANTIERE
+
+{header}
+
+Avanzamento generale: {progress}%
+{text_progress_bar(progress)} {progress}% - {label}
+
+Attività totali: {total}
+Completate: {completate}
+In corso: {in_corso_n}
+Da presidiare/bloccate: {bloccate_n}
+
+Prossimi passaggi:
+{bullet(da_fare, max_items=5)}
+"""
+    budget_report = f"""REPORT BUDGET INIZIALE VS EFFETTIVO
+
+{header}
+
+Budget iniziale: {euro(budget['budget_iniziale'])}
+Costo effettivo maturato: {euro(budget['costo_effettivo'])}
+Extra approvati: {euro(budget['extra_approvati'])}
+Totale aggiornato: {euro(budget['totale_aggiornato'])}
+Scostamento: {euro(budget['scostamento'])}
+Budget consumato: {budget['budget_consumato_pct']}%
+Stato: {status_budget}
+
+Nota Fixool:
+{budget['note_budget'] or 'Nessuna nota economica specifica.'}
+"""
+    lavori = f"""REPORT LAVORI FATTI / IN CORSO / DA FARE
+
+{header}
+
+Lavori completati:
+{bullet(fatti)}
+
+Lavori in corso:
+{bullet(in_corso)}
+
+Lavori da fare / prossimi passaggi:
+{bullet(da_fare)}
+
+Punti da confermare o monitorare:
+{bullet(tickets_cliente)}
+"""
+    completo = f"""REPORT CLIENTE COMPLETO FIXOOL
+
+{header}
+
+1. AVANZAMENTO
+Avanzamento generale: {progress}%
+{text_progress_bar(progress)} {progress}% - {label}
+
+2. BUDGET
+Budget iniziale: {euro(budget['budget_iniziale'])}
+Totale aggiornato: {euro(budget['totale_aggiornato'])}
+Scostamento: {euro(budget['scostamento'])}
+Stato: {status_budget}
+
+3. LAVORI COMPLETATI
+{bullet(fatti, max_items=6)}
+
+4. LAVORI IN CORSO
+{bullet(in_corso, max_items=6)}
+
+5. PROSSIMI LAVORI / DA FARE
+{bullet(da_fare, max_items=6)}
+
+6. PUNTI DA CONFERMARE O MONITORARE
+{bullet(tickets_cliente, max_items=6)}
+
+Messaggio Fixool:
+Il cantiere è presidiato con aggiornamento strutturato di avanzamento, budget e prossime attività. Eventuali decisioni richieste saranno condivise in modo puntuale.
+"""
+    return {
+        "Avanzamento cantiere": avanzamento,
+        "Budget iniziale vs effettivo": budget_report,
+        "Lavori fatti / in corso / da fare": lavori,
+        "Report cliente completo": completo,
+    }
+
+
+def page_area_cliente():
+    st.markdown(
+        """
+        <div class="client-hero">
+          <h1>🏡 Area Cliente</h1>
+          <p>Report chiari e presentabili per comunicare avanzamento, budget e prossimi lavori senza trasferire il caos operativo interno.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    cantieri_map = get_cantieri_options()
+    if not cantieri_map:
+        st.info("Crea prima un progetto/cantiere nella sezione Progetti.")
+        return
+    selected = st.selectbox("Progetto / cantiere", list(cantieri_map.keys()), key="area_cliente_cantiere")
+    cantiere_id = cantieri_map[selected]
+    cantiere = query_df("SELECT * FROM cantieri WHERE id = ?", (cantiere_id,)).iloc[0]
+    progress, total, completate, in_corso_n, bloccate_n = compute_cantiere_progress(cantiere_id)
+    budget = get_budget_summary(cantiere_id)
+    status_budget, status_class = budget_status_text(budget)
+    fatti, in_corso, da_fare, bloccate = client_activity_groups(cantiere_id)
+    cliente_tickets = query_df(
+        """
+        SELECT titolo, tipo, responsabile, priorita, scadenza
+        FROM ticket
+        WHERE cantiere_id = ?
+          AND stato NOT IN ('Risolto','Chiuso')
+          AND tipo IN ('Richiesta decisione','Richiesta materiale','Extra lavoro')
+        ORDER BY CASE priorita WHEN 'Critica' THEN 1 WHEN 'Alta' THEN 2 WHEN 'Media' THEN 3 ELSE 4 END, scadenza
+        """,
+        (cantiere_id,),
+    )
+
+    st.markdown(f"### {cantiere['nome']}")
+    st.caption(f"Cliente: {cantiere['cliente'] or '-'} · Indirizzo: {cantiere['indirizzo'] or '-'} · Consegna prevista: {cantiere['data_fine_prevista'] or '-'}")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        render_client_card("Avanzamento", f"{progress}%", cantiere_progress_label(progress))
+    with col2:
+        render_client_card("Budget iniziale", euro(budget["budget_iniziale"]), f"Consumato {budget['budget_consumato_pct']}%")
+    with col3:
+        render_client_card("Totale aggiornato", euro(budget["totale_aggiornato"]), status_budget)
+    with col4:
+        render_client_card("Punti da confermare", str(len(cliente_tickets)), "Decisioni/materiali/extra")
+    st.progress(progress)
+
+    tab_overview, tab_reports, tab_budget, tab_access = st.tabs([
+        "Vista cliente",
+        "Report predefiniti",
+        "Budget / costi",
+        "Accesso o invio",
+    ])
+
+    with tab_overview:
+        col_a, col_b = st.columns([1.2, 1])
+        with col_a:
+            st.markdown("<div class='client-panel'>", unsafe_allow_html=True)
+            st.markdown("<div class='client-section-title'>Avanzamento cantiere</div>", unsafe_allow_html=True)
+            st.progress(progress)
+            st.write(f"**{progress}% - {cantiere_progress_label(progress)}**")
+            st.caption("Barra pensata per essere mostrata al cliente come sintesi immediata dello stato lavori.")
+            st.markdown("</div>", unsafe_allow_html=True)
+            render_client_list("Lavori completati", fatti, empty="Non risultano ancora lavori completati.")
+            render_client_list("Lavori in corso", in_corso, empty="Non risultano lavori attualmente in corso.")
+        with col_b:
+            st.markdown("<div class='client-panel'>", unsafe_allow_html=True)
+            st.markdown("<div class='client-section-title'>Budget iniziale vs effettivo</div>", unsafe_allow_html=True)
+            st.write(f"Budget iniziale: **{euro(budget['budget_iniziale'])}**")
+            st.write(f"Costo effettivo maturato: **{euro(budget['costo_effettivo'])}**")
+            st.write(f"Extra approvati: **{euro(budget['extra_approvati'])}**")
+            st.write(f"Totale aggiornato: **{euro(budget['totale_aggiornato'])}**")
+            st.markdown(f"Stato: <span class='{status_class}'>{_html_escape(status_budget)}</span>", unsafe_allow_html=True)
+            st.progress(min(100, budget["budget_consumato_pct"]))
+            st.caption("La barra mostra il budget consumato rispetto al budget iniziale; eventuali extra sono evidenziati nel totale aggiornato.")
+            st.markdown("</div>", unsafe_allow_html=True)
+            render_client_list("Lavori da fare / prossimi passaggi", da_fare, empty="Non risultano lavori residui.")
+            render_client_list("Punti da confermare / monitorare", cliente_tickets, empty="Nessun punto cliente aperto.")
+
+    with tab_reports:
+        reports = make_client_predefined_reports(cantiere_id)
+        report_name = st.selectbox("Report da generare", list(reports.keys()))
+        report_text = reports[report_name]
+        st.text_area("Report pronto da copiare", value=report_text, height=430)
+        st.download_button(
+            "Scarica report .txt",
+            data=report_text.encode("utf-8-sig"),
+            file_name=f"fixool_{report_name.lower().replace(' ', '_').replace('/', '_')}_{cantiere_id}.txt",
+            mime="text/plain",
+        )
+        st.info("Per il pilota: Fixool genera il report, lo controlla e lo invia manualmente via WhatsApp o email. In una fase successiva potremo creare accesso cliente dedicato e PDF brandizzato.")
+
+    with tab_budget:
+        st.subheader("Gestione budget del progetto")
+        st.caption("Questa parte è interna Fixool: alimenta il report cliente 'Budget iniziale vs effettivo'.")
+        with st.form("budget_cliente_form"):
+            c1, c2, c3 = st.columns(3)
+            budget_iniziale = c1.number_input("Budget iniziale (€)", min_value=0.0, value=float(budget["budget_iniziale"]), step=500.0)
+            costo_effettivo = c2.number_input("Costo effettivo maturato (€)", min_value=0.0, value=float(budget["costo_effettivo"]), step=500.0)
+            extra_approvati = c3.number_input("Extra approvati (€)", min_value=0.0, value=float(budget["extra_approvati"]), step=250.0)
+            note_budget = st.text_area("Nota economica per report", value=budget["note_budget"])
+            if st.form_submit_button("Salva budget", type="primary"):
+                upsert_budget(cantiere_id, budget_iniziale, costo_effettivo, extra_approvati, note_budget)
+                st.success("Budget aggiornato.")
+                st.rerun()
+
+    with tab_access:
+        st.subheader("Come far vedere il report al cliente")
+        st.markdown(
+            """
+            **Modalità consigliata per il pilota**  
+            1. Fixool aggiorna attività, ticket e budget.  
+            2. Entra in **Area Cliente → Report predefiniti**.  
+            3. Genera il report più adatto.  
+            4. Lo controlla e lo invia via WhatsApp o email.
+
+            **Modalità accesso cliente diretto, fase successiva**  
+            Crearemo una vista filtrata con link e password cliente, dove il cliente vede solo avanzamento, budget, lavori e punti da confermare.  
+            Non dovrà vedere ticket interni, note tra artigiani o criticità operative non ancora validate.
+            """
+        )
+        reports = make_client_predefined_reports(cantiere_id)
+        st.text_area("Messaggio breve da inviare con il report", value=f"Ciao, ti inviamo l'aggiornamento del cantiere {cantiere['nome']} con avanzamento lavori, stato budget e prossimi passaggi.\n\n{reports['Report cliente completo']}", height=360)
+
+
+
 def _html_escape(value):
     return str(value or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
@@ -1401,7 +1812,7 @@ def page_export():
     if DB_PATH.exists():
         st.download_button("Scarica backup database completo (.db)", data=DB_PATH.read_bytes(), file_name="fixool_site_os_backup.db", mime="application/octet-stream")
     st.markdown("---")
-    tables = ["cantieri", "artigiani", "attivita", "ticket", "aggiornamenti"]
+    tables = ["cantieri", "artigiani", "attivita", "ticket", "aggiornamenti", "budget_cantiere"]
     for table in tables:
         df = query_df(f"SELECT * FROM {table}")
         csv = df.to_csv(index=False).encode("utf-8-sig")
@@ -1426,7 +1837,7 @@ def page_settings():
         st.rerun()
     if st.button("Svuota database locale", type="primary"):
         with connect() as conn:
-            for table in ["aggiornamenti", "ticket", "attivita", "artigiani", "cantieri"]:
+            for table in ["budget_cantiere", "aggiornamenti", "ticket", "attivita", "artigiani", "cantieri"]:
                 conn.execute(f"DELETE FROM {table}")
             conn.commit()
         st.success("Database svuotato.")
@@ -1442,7 +1853,7 @@ def main():
         seed_demo_data()
         st.session_state["initialized"] = True
     st.sidebar.title("🏗️ Fixool Site OS Light")
-    st.sidebar.caption("MVP cloud-ready per coordinamento cantieri - Patch V7")
+    st.sidebar.caption("MVP cloud-ready per coordinamento cantieri - Patch V8")
     st.sidebar.caption(f"Database: {DB_PATH.name}")
     page = st.sidebar.radio(
         "Menu",
@@ -1450,6 +1861,7 @@ def main():
             "Capo cantiere",
             "Dashboard",
             "Progetti",
+            "Area Cliente",
             "Artigiani / Squadre",
             "Export",
             "Impostazioni",
@@ -1465,6 +1877,8 @@ def main():
         page_dashboard()
     elif page == "Progetti":
         page_progetti()
+    elif page == "Area Cliente":
+        page_area_cliente()
     elif page == "Artigiani / Squadre":
         page_artigiani()
     elif page == "Export":
