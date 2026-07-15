@@ -2,6 +2,7 @@ import os
 import sqlite3
 from pathlib import Path
 from datetime import date, datetime, timedelta
+from urllib.parse import quote
 import pandas as pd
 import streamlit as st
 
@@ -471,6 +472,26 @@ def init_db():
                 note_budget TEXT,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(cantiere_id) REFERENCES cantieri(id)
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS notifiche (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cantiere_id INTEGER NOT NULL,
+                ticket_id INTEGER,
+                destinatario TEXT,
+                telefono TEXT,
+                canale TEXT DEFAULT 'WhatsApp',
+                messaggio TEXT NOT NULL,
+                stato TEXT DEFAULT 'Preparata',
+                risposta TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                sent_at TEXT,
+                responded_at TEXT,
+                FOREIGN KEY(cantiere_id) REFERENCES cantieri(id),
+                FOREIGN KEY(ticket_id) REFERENCES ticket(id)
             )
             """
         )
@@ -1878,6 +1899,7 @@ def page_capo_cantiere():
 
     with tab_blocchi:
         st.markdown("<div class='fixool-section-title'>Gestione rapida blocchi aperti</div>", unsafe_allow_html=True)
+        st.caption("Per notificare il responsabile via WhatsApp usa la nuova sezione Centro notifiche.")
         tic_df = query_df(
             """
             SELECT id, tipo, titolo, responsabile, priorita, stato, scadenza, impatto
@@ -1912,6 +1934,223 @@ def page_capo_cantiere():
         report, client_report = make_daily_report(cantiere_id)
         st.text_area("Versione cliente", value=client_report, height=360)
         st.caption("Usa questa versione per WhatsApp/email al cliente. È volutamente pulita: avanzamento, prossimi step e punti da confermare.")
+
+
+def clean_phone_number(phone: str) -> str:
+    """Return a WhatsApp-compatible phone number string, digits only.
+
+    For the MVP this is intentionally simple: the user can paste +39..., 0039..., or a plain number.
+    """
+    if phone is None:
+        return ""
+    digits = "".join(ch for ch in str(phone) if ch.isdigit())
+    if digits.startswith("00"):
+        digits = digits[2:]
+    return digits
+
+
+def make_whatsapp_url(phone: str, message: str) -> str:
+    phone_digits = clean_phone_number(phone)
+    encoded = quote(message or "")
+    if phone_digits:
+        return f"https://wa.me/{phone_digits}?text={encoded}"
+    return f"https://wa.me/?text={encoded}"
+
+
+def get_contact_phone_by_name(name: str) -> str:
+    if not name:
+        return ""
+    try:
+        df = query_df("SELECT nome, telefono FROM artigiani WHERE attivo = 1")
+        if len(df) == 0:
+            return ""
+        exact = df[df["nome"].fillna("").str.lower().eq(str(name).lower())]
+        if len(exact):
+            return exact.iloc[0]["telefono"] or ""
+        partial = df[df["nome"].fillna("").str.lower().str.contains(str(name).lower(), regex=False)]
+        if len(partial):
+            return partial.iloc[0]["telefono"] or ""
+    except Exception:
+        return ""
+    return ""
+
+
+def build_ticket_notification_message(ticket_row, cantiere_row, destinatario: str = "") -> str:
+    due = ticket_row.get("scadenza") or "da confermare"
+    dest = destinatario or ticket_row.get("responsabile") or "referente"
+    lines = [
+        "Fixool OS | Azione richiesta",
+        f"Cantiere: {cantiere_row.get('nome')}",
+        f"Ticket #{int(ticket_row.get('id'))}: {ticket_row.get('titolo')}",
+        f"Tipo: {ticket_row.get('tipo')} · Priorità: {ticket_row.get('priorita')}",
+        f"Responsabile: {dest}",
+        f"Scadenza: {due}",
+        "",
+        "Serve un aggiornamento per sbloccare il flusso del cantiere.",
+    ]
+    if ticket_row.get("impatto"):
+        lines.append(f"Impatto: {ticket_row.get('impatto')}")
+    if ticket_row.get("descrizione"):
+        lines.extend(["", f"Dettaglio: {ticket_row.get('descrizione')}"])
+    lines.extend([
+        "",
+        "Rispondi con:",
+        "1 = confermo / procedo",
+        "2 = mi serve una informazione",
+        "3 = non posso procedere",
+        "",
+        "Grazie, Fixool",
+    ])
+    return "\n".join(lines)
+
+
+def page_centro_notifiche():
+    render_app_header(
+        "Centro notifiche",
+        "Prepara notifiche WhatsApp dai ticket, registra invii manuali e raccogli le risposte nel sistema operativo Fixool.",
+    )
+    st.info(
+        "V10 è un primo step senza API WhatsApp: il sistema prepara il messaggio, apre WhatsApp con testo precompilato e registra manualmente invio/risposta. "
+        "Quando il modello funziona sul campo, si potrà passare alla WhatsApp Business Platform."
+    )
+    cantieri_map = get_cantieri_options()
+    if not cantieri_map:
+        st.info("Crea prima un progetto/cantiere.")
+        return
+    selected = st.selectbox("Progetto / cantiere", list(cantieri_map.keys()), key="notifiche_cantiere")
+    cantiere_id = cantieri_map[selected]
+    cantiere = query_df("SELECT * FROM cantieri WHERE id = ?", (cantiere_id,)).iloc[0]
+
+    open_tickets = query_df(
+        """
+        SELECT id, tipo, titolo, responsabile, priorita, stato, scadenza, impatto, descrizione
+        FROM ticket
+        WHERE cantiere_id = ? AND stato NOT IN ('Risolto','Chiuso')
+        ORDER BY CASE priorita WHEN 'Critica' THEN 1 WHEN 'Alta' THEN 2 WHEN 'Media' THEN 3 ELSE 4 END, scadenza, id
+        """,
+        (cantiere_id,),
+    )
+    notif = query_df("SELECT * FROM notifiche WHERE cantiere_id = ? ORDER BY id DESC", (cantiere_id,))
+    sent_count = int(notif["stato"].isin(["Inviata manualmente", "Risposta ricevuta", "Chiusa"]).sum()) if len(notif) else 0
+    response_count = int(notif["risposta"].fillna("").astype(str).str.len().gt(0).sum()) if len(notif) else 0
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Ticket aperti", len(open_tickets))
+    c2.metric("Notifiche preparate", len(notif))
+    c3.metric("Notifiche inviate", sent_count)
+    c4.metric("Risposte registrate", response_count)
+
+    tab_da, tab_prepara, tab_log, tab_regole = st.tabs(["🔔 Da notificare", "📲 Prepara WhatsApp", "📥 Risposte / log", "⚙️ Regole future"])
+
+    with tab_da:
+        st.subheader("Ticket aperti da notificare o sollecitare")
+        if len(open_tickets) == 0:
+            st.success("Nessun ticket aperto da notificare.")
+        else:
+            # Add latest notification date per ticket for readability.
+            latest = query_df(
+                """
+                SELECT ticket_id, MAX(created_at) AS ultima_notifica, COUNT(*) AS notifiche
+                FROM notifiche
+                WHERE cantiere_id = ? AND ticket_id IS NOT NULL
+                GROUP BY ticket_id
+                """,
+                (cantiere_id,),
+            )
+            view = open_tickets.merge(latest, how="left", left_on="id", right_on="ticket_id").drop(columns=["ticket_id"], errors="ignore")
+            st.dataframe(view, use_container_width=True, hide_index=True)
+            st.caption("Usa la tab 'Prepara WhatsApp' per generare un messaggio precompilato al responsabile del ticket.")
+
+    with tab_prepara:
+        st.subheader("Prepara notifica WhatsApp da ticket")
+        if len(open_tickets) == 0:
+            st.info("Non ci sono ticket aperti.")
+        else:
+            ticket_label = st.selectbox(
+                "Ticket",
+                [f"{int(r.id)} - {r.titolo}" for r in open_tickets.itertuples()],
+                key="notifica_ticket_select",
+            )
+            ticket_id = int(ticket_label.split(" - ")[0])
+            ticket_row = open_tickets[open_tickets["id"].eq(ticket_id)].iloc[0]
+            default_dest = ticket_row.get("responsabile") or ""
+            default_phone = get_contact_phone_by_name(default_dest)
+            default_message = build_ticket_notification_message(ticket_row, cantiere, default_dest)
+
+            with st.form("prepare_notification_form"):
+                col1, col2, col3 = st.columns([1.1, 1, 1])
+                destinatario = col1.text_input("Destinatario", value=default_dest)
+                telefono = col2.text_input("Telefono WhatsApp", value=default_phone, placeholder="Es. +39 339 1234567")
+                canale = col3.selectbox("Canale", ["WhatsApp", "WhatsApp gruppo", "Email", "Telefonata", "Altro"])
+                messaggio = st.text_area("Messaggio da inviare", value=default_message, height=260)
+                stato_notifica = st.selectbox("Stato da registrare", ["Preparata", "Inviata manualmente"], index=1)
+                submitted = st.form_submit_button("Registra notifica", type="primary")
+            if submitted:
+                sent_at = str(datetime.now()) if stato_notifica == "Inviata manualmente" else None
+                execute(
+                    """INSERT INTO notifiche(cantiere_id, ticket_id, destinatario, telefono, canale, messaggio, stato, sent_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (cantiere_id, ticket_id, destinatario, telefono, canale, messaggio, stato_notifica, sent_at),
+                )
+                st.success("Notifica registrata nel Centro notifiche.")
+                st.session_state["last_whatsapp_message"] = messaggio
+                st.session_state["last_whatsapp_phone"] = telefono
+
+            last_msg = st.session_state.get("last_whatsapp_message", messaggio)
+            last_phone = st.session_state.get("last_whatsapp_phone", telefono)
+            wa_url = make_whatsapp_url(last_phone, last_msg)
+            st.markdown(f"### Invio rapido")
+            st.markdown(f"[Apri WhatsApp con messaggio precompilato]({wa_url})")
+            st.caption("Se il telefono non è valorizzato, WhatsApp apre la scelta contatto/chat. Se il numero è presente, prova ad aprire direttamente la chat.")
+            with st.expander("Mostra testo messaggio"):
+                st.code(last_msg)
+
+    with tab_log:
+        st.subheader("Log notifiche e risposte")
+        log_df = query_df(
+            """
+            SELECT n.id, n.ticket_id, t.titolo AS ticket, n.destinatario, n.telefono, n.canale, n.stato, n.created_at, n.sent_at, n.responded_at, n.risposta
+            FROM notifiche n
+            LEFT JOIN ticket t ON t.id = n.ticket_id
+            WHERE n.cantiere_id = ?
+            ORDER BY n.id DESC
+            """,
+            (cantiere_id,),
+        )
+        if len(log_df) == 0:
+            st.info("Non ci sono ancora notifiche registrate.")
+        else:
+            st.dataframe(log_df, use_container_width=True, hide_index=True)
+            notif_label = st.selectbox("Aggiorna notifica / registra risposta", [f"{int(r.id)} - {r.ticket or 'senza ticket'}" for r in log_df.itertuples()], key="notifica_update_select")
+            notif_id = int(notif_label.split(" - ")[0])
+            nr = query_df("SELECT * FROM notifiche WHERE id = ?", (notif_id,)).iloc[0]
+            with st.form("update_notification_form"):
+                stato = st.selectbox("Stato notifica", ["Preparata", "Inviata manualmente", "Risposta ricevuta", "Chiusa"], index=["Preparata", "Inviata manualmente", "Risposta ricevuta", "Chiusa"].index(nr["stato"]) if nr["stato"] in ["Preparata", "Inviata manualmente", "Risposta ricevuta", "Chiusa"] else 0)
+                risposta = st.text_area("Risposta ricevuta / nota", value=nr["risposta"] or "", height=120)
+                stato_ticket = st.selectbox("Aggiorna anche stato ticket", ["Non modificare"] + STATI_TICKET)
+                submitted = st.form_submit_button("Salva risposta / stato", type="primary")
+            if submitted:
+                responded_at = str(datetime.now()) if risposta.strip() else nr["responded_at"]
+                execute("UPDATE notifiche SET stato = ?, risposta = ?, responded_at = ? WHERE id = ?", (stato, risposta, responded_at, notif_id))
+                if stato_ticket != "Non modificare" and nr["ticket_id"]:
+                    execute("UPDATE ticket SET stato = ? WHERE id = ?", (stato_ticket, int(nr["ticket_id"])))
+                    update_closed_at("ticket", int(nr["ticket_id"]), stato_ticket)
+                st.success("Aggiornamento salvato.")
+                st.rerun()
+
+    with tab_regole:
+        st.subheader("Regole da automatizzare in futuro")
+        st.markdown(
+            """
+            Questa V10 non invia ancora messaggi tramite API: crea il processo e il log. Le prossime evoluzioni possibili sono:
+
+            - reminder automatico se un ticket Alta/Critica resta aperto oltre 24 ore;
+            - escalation al capo cantiere se non arriva risposta;
+            - creazione ticket automatica da messaggio WhatsApp ricevuto;
+            - aggiornamento attività da risposta WhatsApp;
+            - invio report cliente con WhatsApp Business Platform.
+            """
+        )
 
 
 def page_progetti():
@@ -1950,7 +2189,7 @@ def page_export():
     if DB_PATH.exists():
         st.download_button("Scarica backup database completo (.db)", data=DB_PATH.read_bytes(), file_name="fixool_site_os_backup.db", mime="application/octet-stream")
     st.markdown("---")
-    tables = ["cantieri", "artigiani", "attivita", "ticket", "aggiornamenti", "budget_cantiere"]
+    tables = ["cantieri", "artigiani", "attivita", "ticket", "notifiche", "aggiornamenti", "budget_cantiere"]
     for table in tables:
         df = query_df(f"SELECT * FROM {table}")
         csv = df.to_csv(index=False).encode("utf-8-sig")
@@ -1978,7 +2217,7 @@ def page_settings():
         st.rerun()
     if st.button("Svuota database locale", type="primary"):
         with connect() as conn:
-            for table in ["budget_cantiere", "aggiornamenti", "ticket", "attivita", "artigiani", "cantieri"]:
+            for table in ["notifiche", "budget_cantiere", "aggiornamenti", "ticket", "attivita", "artigiani", "cantieri"]:
                 conn.execute(f"DELETE FROM {table}")
             conn.commit()
         st.success("Database svuotato.")
@@ -1994,12 +2233,13 @@ def main():
         seed_demo_data()
         st.session_state["initialized"] = True
     render_sidebar_brand()
-    st.sidebar.caption("Patch V9 · Branding & UI cliente")
+    st.sidebar.caption("Patch V10 · Centro notifiche")
     st.sidebar.caption(f"Database: {DB_PATH.name}")
     page = st.sidebar.radio(
         "Menu",
         [
             "Capo cantiere",
+            "Centro notifiche",
             "Dashboard",
             "Progetti",
             "Area Cliente",
@@ -2014,6 +2254,8 @@ def main():
 
     if page == "Capo cantiere":
         page_capo_cantiere()
+    elif page == "Centro notifiche":
+        page_centro_notifiche()
     elif page == "Dashboard":
         page_dashboard()
     elif page == "Progetti":
