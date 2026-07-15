@@ -95,6 +95,57 @@ st.set_page_config(page_title=APP_TITLE, page_icon="🏗️", layout="wide")
 
 
 
+def apply_ui_styles():
+    """Light visual layer for the capo cantiere interface."""
+    st.markdown(
+        """
+        <style>
+        .fixool-hero {
+            background: linear-gradient(135deg, #141E30 0%, #243B55 100%);
+            padding: 22px 26px;
+            border-radius: 18px;
+            color: white;
+            margin-bottom: 18px;
+            box-shadow: 0 8px 28px rgba(0,0,0,0.12);
+        }
+        .fixool-hero h1 {margin: 0; font-size: 2.0rem; line-height: 1.15;}
+        .fixool-hero p {margin: 8px 0 0 0; font-size: 1.02rem; opacity: .9;}
+        .fixool-card {
+            background: #ffffff;
+            border: 1px solid rgba(49, 51, 63, 0.10);
+            border-radius: 16px;
+            padding: 16px 18px;
+            margin-bottom: 12px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.05);
+        }
+        .fixool-card-title {font-size: .82rem; color: #6b7280; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px;}
+        .fixool-card-value {font-size: 1.9rem; font-weight: 750; color: #111827; line-height: 1.1;}
+        .fixool-card-note {font-size: .9rem; color: #4b5563; margin-top: 5px;}
+        .fixool-section-title {font-size: 1.25rem; font-weight: 750; margin: 12px 0 8px 0;}
+        .fixool-pill {display:inline-block; padding:4px 9px; border-radius:999px; font-size:.78rem; font-weight:650; margin-right:6px;}
+        .pill-red {background:#fee2e2; color:#991b1b;}
+        .pill-yellow {background:#fef3c7; color:#92400e;}
+        .pill-green {background:#dcfce7; color:#166534;}
+        .pill-blue {background:#dbeafe; color:#1e40af;}
+        .pill-gray {background:#f3f4f6; color:#374151;}
+        .task-card {border-left: 6px solid #e5e7eb; padding: 14px 16px; border-radius: 14px; background:#fff; margin-bottom:10px; box-shadow:0 2px 10px rgba(0,0,0,.04);}
+        .task-card.high {border-left-color:#f59e0b;}
+        .task-card.critical {border-left-color:#dc2626;}
+        .task-title {font-weight:750; font-size:1.02rem; color:#111827; margin-bottom:3px;}
+        .task-meta {font-size:.88rem; color:#4b5563;}
+        .small-muted {color:#6b7280; font-size:.9rem;}
+        @media (max-width: 700px) {
+            .fixool-hero {padding:18px 18px; border-radius:14px;}
+            .fixool-hero h1 {font-size:1.55rem;}
+            .fixool-card-value {font-size:1.55rem;}
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+
 def get_app_secret(key: str, default: str = "") -> str:
     """Read a secret from Streamlit secrets, then environment, then default."""
     try:
@@ -1084,6 +1135,236 @@ def page_report():
         st.text_area("Versione pulita per cliente", value=client_report, height=420)
 
 
+
+def _html_escape(value):
+    return str(value or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _priority_class(priority):
+    if priority == "Critica":
+        return "pill-red"
+    if priority == "Alta":
+        return "pill-yellow"
+    if priority == "Media":
+        return "pill-blue"
+    return "pill-gray"
+
+
+def _risk_class(level):
+    return "pill-red" if level == "Rosso" else "pill-yellow" if level == "Giallo" else "pill-green"
+
+
+def render_capo_card(title, value, note=""):
+    st.markdown(
+        f"""
+        <div class="fixool-card">
+          <div class="fixool-card-title">{_html_escape(title)}</div>
+          <div class="fixool-card-value">{_html_escape(value)}</div>
+          <div class="fixool-card-note">{_html_escape(note)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_task_card(row, kind="task"):
+    prio = row.get("priorita") or "Media"
+    card_class = "critical" if prio == "Critica" else "high" if prio == "Alta" else ""
+    titolo = _html_escape(row.get("titolo"))
+    assegnato = _html_escape(row.get("assegnato_a") or row.get("responsabile") or "Da assegnare")
+    stato = _html_escape(row.get("stato") or "-")
+    scadenza = _html_escape(row.get("scadenza") or "-")
+    fase = _html_escape(row.get("fase") or row.get("tipo") or "")
+    pct = row.get("percentuale", None)
+    pct_text = f" · {int(pct or 0)}%" if pct is not None else ""
+    pill = _priority_class(prio)
+    st.markdown(
+        f"""
+        <div class="task-card {card_class}">
+          <div class="task-title">{titolo}</div>
+          <div class="task-meta">
+            <span class="fixool-pill {pill}">{_html_escape(prio)}</span>
+            <span class="fixool-pill pill-gray">{stato}</span>
+            {fase} · {assegnato} · scad. {scadenza}{pct_text}
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def page_capo_cantiere():
+    st.markdown(
+        """
+        <div class="fixool-hero">
+          <h1>👷 Vista capo cantiere</h1>
+          <p>Una schermata operativa unica: cosa controllare oggi, cosa aggiornare subito, cosa comunicare al cliente.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    cantieri_map = get_cantieri_options()
+    if not cantieri_map:
+        st.info("Crea prima un progetto/cantiere nella sezione Progetti.")
+        return
+    selected = st.selectbox("Progetto / cantiere da governare", list(cantieri_map.keys()), key="capo_cantiere_main")
+    cantiere_id = cantieri_map[selected]
+    cantiere = query_df("SELECT * FROM cantieri WHERE id = ?", (cantiere_id,)).iloc[0]
+
+    pct, total, completate, in_corso, bloccate = compute_cantiere_progress(cantiere_id)
+    risk = assess_cantiere_risk(cantiere_id)
+    open_tickets = query_df("SELECT * FROM ticket WHERE cantiere_id = ? AND stato NOT IN ('Risolto','Chiuso')", (cantiere_id,))
+    critical_tickets = open_tickets[(open_tickets["stato"].eq("Bloccante")) | (open_tickets["priorita"].isin(["Alta", "Critica"]))] if len(open_tickets) else pd.DataFrame()
+
+    st.markdown(f"### {cantiere['nome']}")
+    st.caption(f"Cliente: {cantiere['cliente'] or '-'} · Capo cantiere: {cantiere['capo_cantiere'] or '-'} · Stato: {cantiere['stato'] or '-'}")
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        render_capo_card("Avanzamento", f"{pct}%", cantiere_progress_label(pct))
+    with c2:
+        render_capo_card("Rischio", risk["livello"], risk["sintesi"])
+    with c3:
+        render_capo_card("Attività aperte", total - completate, f"{in_corso} in corso · {bloccate} bloccate")
+    with c4:
+        render_capo_card("Ticket aperti", len(open_tickets), f"{len(critical_tickets)} urgenti/bloccanti")
+
+    st.progress(pct / 100, text=f"Avanzamento generale cantiere: {pct}% - {cantiere_progress_label(pct)}")
+    risk_pill = _risk_class(risk["livello"])
+    st.markdown(
+        f"<span class='fixool-pill {risk_pill}'>Rischio {risk['livello']}</span> <span class='small-muted'>{_html_escape(', '.join(risk['motivi']))}. {_html_escape(risk['azione'])}</span>",
+        unsafe_allow_html=True,
+    )
+
+    tab_oggi, tab_aggiorna, tab_blocchi, tab_report = st.tabs(["🔥 Oggi", "⚡ Aggiorna rapido", "🚧 Blocchi", "📩 Report cliente"])
+
+    with tab_oggi:
+        st.markdown("<div class='fixool-section-title'>Priorità operative di oggi</div>", unsafe_allow_html=True)
+        urgent_tasks = query_df(
+            """
+            SELECT id, fase, titolo, assegnato_a, stato, priorita, scadenza, percentuale
+            FROM attivita
+            WHERE cantiere_id = ? AND stato NOT IN ('Completata','Verificata')
+            ORDER BY CASE priorita WHEN 'Critica' THEN 1 WHEN 'Alta' THEN 2 WHEN 'Media' THEN 3 ELSE 4 END, scadenza, id
+            LIMIT 8
+            """,
+            (cantiere_id,),
+        )
+        if len(urgent_tasks) == 0:
+            st.success("Nessuna attività aperta: il cantiere risulta completato o da pianificare.")
+        else:
+            for _, row in urgent_tasks.iterrows():
+                render_task_card(row)
+        st.markdown("<div class='fixool-section-title'>Blocchi da sbloccare</div>", unsafe_allow_html=True)
+        blocchi = query_df(
+            """
+            SELECT id, tipo, titolo, responsabile, stato, priorita, scadenza, impatto
+            FROM ticket
+            WHERE cantiere_id = ? AND stato NOT IN ('Risolto','Chiuso')
+            ORDER BY CASE priorita WHEN 'Critica' THEN 1 WHEN 'Alta' THEN 2 WHEN 'Media' THEN 3 ELSE 4 END, scadenza, id
+            LIMIT 6
+            """,
+            (cantiere_id,),
+        )
+        if len(blocchi) == 0:
+            st.success("Nessun blocco aperto.")
+        else:
+            for _, row in blocchi.iterrows():
+                render_task_card(row, kind="ticket")
+
+    with tab_aggiorna:
+        st.markdown("<div class='fixool-section-title'>Aggiorna una attività in 30 secondi</div>", unsafe_allow_html=True)
+        act_df = query_df(
+            "SELECT id, titolo, stato, priorita, percentuale, note FROM attivita WHERE cantiere_id = ? ORDER BY scadenza, id",
+            (cantiere_id,),
+        )
+        if len(act_df):
+            act_label = st.selectbox("Attività", [f"{int(r.id)} - {r.titolo}" for r in act_df.itertuples()], key="capo_update_activity")
+            act_id = int(act_label.split(" - ")[0])
+            act_row = act_df[act_df["id"].eq(act_id)].iloc[0]
+            with st.form("capo_fast_update_activity"):
+                col1, col2, col3 = st.columns(3)
+                nuovo_stato = col1.selectbox("Stato", STATI_ATTIVITA, index=STATI_ATTIVITA.index(act_row["stato"]) if act_row["stato"] in STATI_ATTIVITA else 0)
+                nuova_prio = col2.selectbox("Priorità", PRIORITA, index=PRIORITA.index(act_row["priorita"]) if act_row["priorita"] in PRIORITA else 1)
+                nuova_pct = col3.slider("Avanzamento %", 0, 100, int(act_row["percentuale"] or 0), step=5)
+                nota = st.text_area("Nota rapida", placeholder="Es. completato lato idraulico, manca verifica capo cantiere")
+                submitted = st.form_submit_button("Aggiorna attività", type="primary")
+            if submitted:
+                nuova_pct = progress_from_status(nuovo_stato, nuova_pct)
+                old_note = act_row["note"] or ""
+                new_note = old_note
+                if nota.strip():
+                    new_note = (old_note + "\n" if old_note else "") + f"[{datetime.now().strftime('%d/%m %H:%M')}] {nota.strip()}"
+                execute("UPDATE attivita SET stato = ?, priorita = ?, percentuale = ?, note = ? WHERE id = ?", (nuovo_stato, nuova_prio, nuova_pct, new_note, act_id))
+                update_closed_at("attivita", act_id, nuovo_stato)
+                st.success("Attività aggiornata.")
+                st.rerun()
+        else:
+            st.info("Non ci sono attività da aggiornare.")
+
+        st.markdown("<div class='fixool-section-title'>Apri un blocco / richiesta</div>", unsafe_allow_html=True)
+        with st.form("capo_fast_ticket"):
+            col1, col2 = st.columns(2)
+            tipo = col1.selectbox("Tipo", ["Blocco", "Richiesta decisione", "Richiesta materiale", "Rischio ritardo", "Difetto / non conformità"])
+            priorita = col2.selectbox("Priorità", ["Alta", "Critica", "Media", "Bassa"])
+            titolo = st.text_input("Titolo breve", placeholder="Es. Confermare posizione termoarredo")
+            descrizione = st.text_area("Descrizione", placeholder="Scrivi cosa blocca il cantiere e cosa serve per sbloccarlo")
+            col3, col4 = st.columns(2)
+            responsabile = col3.text_input("Responsabile", placeholder="Capo cantiere / cliente / artigiano")
+            scadenza = col4.date_input("Scadenza", value=date.today() + timedelta(days=1))
+            impatto = st.text_input("Impatto", placeholder="Es. rischio slittamento pavimentista di 1 giorno")
+            submitted = st.form_submit_button("Crea ticket", type="primary")
+        if submitted:
+            if not titolo.strip():
+                st.error("Inserisci almeno il titolo del ticket.")
+            else:
+                stato = "Bloccante" if tipo == "Blocco" or priorita == "Critica" else "Aperto"
+                execute(
+                    """INSERT INTO ticket(cantiere_id, tipo, titolo, descrizione, aperto_da, responsabile, priorita, stato, impatto, scadenza)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (cantiere_id, tipo, titolo.strip(), descrizione, "Capo cantiere", responsabile, priorita, stato, impatto, str(scadenza)),
+                )
+                st.success("Ticket creato.")
+                st.rerun()
+
+    with tab_blocchi:
+        st.markdown("<div class='fixool-section-title'>Gestione rapida blocchi aperti</div>", unsafe_allow_html=True)
+        tic_df = query_df(
+            """
+            SELECT id, tipo, titolo, responsabile, priorita, stato, scadenza, impatto
+            FROM ticket
+            WHERE cantiere_id = ? AND stato NOT IN ('Risolto','Chiuso')
+            ORDER BY CASE priorita WHEN 'Critica' THEN 1 WHEN 'Alta' THEN 2 WHEN 'Media' THEN 3 ELSE 4 END, scadenza, id
+            """,
+            (cantiere_id,),
+        )
+        if len(tic_df) == 0:
+            st.success("Non ci sono blocchi/ticket aperti.")
+        else:
+            st.dataframe(tic_df, use_container_width=True, hide_index=True)
+            ticket_label = st.selectbox("Ticket da aggiornare", [f"{int(r.id)} - {r.titolo}" for r in tic_df.itertuples()], key="capo_update_ticket")
+            ticket_id = int(ticket_label.split(" - ")[0])
+            row = tic_df[tic_df["id"].eq(ticket_id)].iloc[0]
+            with st.form("capo_fast_update_ticket"):
+                col1, col2, col3 = st.columns(3)
+                nuovo_stato = col1.selectbox("Stato", STATI_TICKET, index=STATI_TICKET.index(row["stato"]) if row["stato"] in STATI_TICKET else 0)
+                nuova_prio = col2.selectbox("Priorità", PRIORITA, index=PRIORITA.index(row["priorita"]) if row["priorita"] in PRIORITA else 1)
+                nuovo_resp = col3.text_input("Responsabile", value=row["responsabile"] or "")
+                nuovo_impatto = st.text_area("Impatto / nota", value=row["impatto"] or "")
+                submitted = st.form_submit_button("Aggiorna ticket", type="primary")
+            if submitted:
+                execute("UPDATE ticket SET stato = ?, priorita = ?, responsabile = ?, impatto = ? WHERE id = ?", (nuovo_stato, nuova_prio, nuovo_resp, nuovo_impatto, ticket_id))
+                update_closed_at("ticket", ticket_id, nuovo_stato)
+                st.success("Ticket aggiornato.")
+                st.rerun()
+
+    with tab_report:
+        st.markdown("<div class='fixool-section-title'>Report cliente pronto da copiare</div>", unsafe_allow_html=True)
+        report, client_report = make_daily_report(cantiere_id)
+        st.text_area("Versione cliente", value=client_report, height=360)
+        st.caption("Usa questa versione per WhatsApp/email al cliente. È volutamente pulita: avanzamento, prossimi step e punti da confermare.")
+
+
 def page_progetti():
     st.header("Progetti")
     st.caption(
@@ -1156,15 +1437,17 @@ def main():
     if not require_password():
         return
     init_db()
+    apply_ui_styles()
     if "initialized" not in st.session_state:
         seed_demo_data()
         st.session_state["initialized"] = True
     st.sidebar.title("🏗️ Fixool Site OS Light")
-    st.sidebar.caption("MVP cloud-ready per coordinamento cantieri - Patch V6")
+    st.sidebar.caption("MVP cloud-ready per coordinamento cantieri - Patch V7")
     st.sidebar.caption(f"Database: {DB_PATH.name}")
     page = st.sidebar.radio(
         "Menu",
         [
+            "Capo cantiere",
             "Dashboard",
             "Progetti",
             "Artigiani / Squadre",
@@ -1176,7 +1459,9 @@ def main():
     st.sidebar.markdown("**Metodo Fixool**")
     st.sidebar.markdown("1. Ogni problema diventa ticket\n2. Ogni ticket ha responsabile\n3. Ogni blocco ha impatto\n4. Ogni giorno si produce un report")
 
-    if page == "Dashboard":
+    if page == "Capo cantiere":
+        page_capo_cantiere()
+    elif page == "Dashboard":
         page_dashboard()
     elif page == "Progetti":
         page_progetti()
