@@ -5,7 +5,11 @@ from datetime import date, datetime, timedelta
 import pandas as pd
 import streamlit as st
 
-APP_TITLE = "Fixool Site OS Light"
+APP_TITLE = "Fixool OS"
+BRAND_NAME = "Fixool"
+BRAND_PRODUCT = "Fixool OS"
+BRAND_PAYOFF = "Ristrutturazioni senza pensieri, coordinate con metodo"
+BRAND_FOOTER = "Fixool · Milano e Lombardia · ristrutturazioni chiavi in mano"
 DB_PATH = Path(os.environ.get("FIXOOL_DB_PATH", Path(__file__).with_name("fixool_site_os.db")))
 STATI_ATTIVITA = ["Da fare", "In corso", "Bloccata", "Completata", "Verificata"]
 STATI_TICKET = ["Aperto", "In gestione", "Bloccante", "Risolto", "Chiuso"]
@@ -100,6 +104,81 @@ def apply_ui_styles():
     st.markdown(
         """
         <style>
+        :root {
+            --fixool-ink: #111827;
+            --fixool-slate: #334155;
+            --fixool-soft: #f8fafc;
+            --fixool-accent: #c9a44c;
+            --fixool-accent-soft: #f6edd7;
+            --fixool-green: #166534;
+        }
+        .stApp {
+            background: linear-gradient(180deg, #f8fafc 0%, #ffffff 34%, #f8fafc 100%);
+        }
+        section[data-testid="stSidebar"] {
+            background: linear-gradient(180deg, #101827 0%, #1f2937 100%);
+        }
+        section[data-testid="stSidebar"] * {
+            color: #f8fafc !important;
+        }
+        section[data-testid="stSidebar"] div[role="radiogroup"] label {
+            background: rgba(255,255,255,.06);
+            border-radius: 12px;
+            padding: 6px 8px;
+            margin: 4px 0;
+        }
+        .fixool-wordmark {
+            font-size: 1.55rem;
+            font-weight: 900;
+            letter-spacing: .08em;
+            line-height: 1;
+        }
+        .fixool-wordmark .dot { color: var(--fixool-accent); }
+        .fixool-brand-sub {
+            font-size:.82rem;
+            opacity:.80;
+            margin-top:7px;
+            line-height:1.25;
+        }
+        .fixool-brand-block {
+            background: rgba(255,255,255,.08);
+            border: 1px solid rgba(255,255,255,.12);
+            border-radius: 16px;
+            padding: 15px 14px;
+            margin-bottom: 14px;
+        }
+        .fixool-app-header {
+            background: linear-gradient(135deg, #111827 0%, #334155 70%, #c9a44c 160%);
+            color:white;
+            padding: 22px 26px;
+            border-radius: 20px;
+            margin-bottom: 18px;
+            box-shadow: 0 10px 28px rgba(15,23,42,.16);
+        }
+        .fixool-app-header h1 {margin:0; font-size:1.9rem;}
+        .fixool-app-header p {margin:7px 0 0 0; opacity:.9;}
+        .fixool-login-card {
+            max-width: 520px;
+            margin: 6vh auto 18px auto;
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 24px;
+            padding: 28px 30px;
+            box-shadow: 0 16px 42px rgba(15,23,42,.13);
+        }
+        .fixool-login-mark {
+            font-size: 2.0rem;
+            font-weight: 900;
+            letter-spacing: .08em;
+            color:#111827;
+        }
+        .fixool-login-mark span {color: var(--fixool-accent);}
+        .fixool-login-title {font-size:1.45rem; font-weight:800; color:#111827; margin-top:12px;}
+        .fixool-login-subtitle {color:#64748b; margin-top:6px;}
+        div.stButton > button[kind="primary"], div.stDownloadButton > button {
+            border-radius: 12px !important;
+            font-weight: 700 !important;
+        }
         .fixool-hero {
             background: linear-gradient(135deg, #141E30 0%, #243B55 100%);
             padding: 22px 26px;
@@ -141,7 +220,7 @@ def apply_ui_styles():
         }
 
         .client-hero {
-            background: linear-gradient(135deg, #0f172a 0%, #334155 50%, #64748b 100%);
+            background: linear-gradient(135deg, #111827 0%, #334155 60%, #c9a44c 160%);
             padding: 28px 30px;
             border-radius: 22px;
             color: white;
@@ -180,6 +259,53 @@ def apply_ui_styles():
 
 
 
+def get_logo_url() -> str:
+    """Optional logo URL from Streamlit secrets/env.
+
+    In Streamlit Cloud you can set:
+    FIXOOL_LOGO_URL = "https://.../logo.png"
+    If missing, the app shows a clean text wordmark.
+    """
+    return get_app_secret("FIXOOL_LOGO_URL", "")
+
+
+def render_sidebar_brand():
+    logo_url = get_logo_url()
+    if logo_url:
+        st.sidebar.markdown(
+            f"""
+            <div class="fixool-brand-block">
+              <img src="{logo_url}" style="max-width:150px; display:block; margin-bottom:10px;"/>
+              <div class="fixool-brand-sub">{BRAND_PRODUCT}<br>{BRAND_PAYOFF}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        st.sidebar.markdown(
+            f"""
+            <div class="fixool-brand-block">
+              <div class="fixool-wordmark">FIXOOL<span class="dot">.</span></div>
+              <div class="fixool-brand-sub">{BRAND_PRODUCT}<br>{BRAND_PAYOFF}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+def render_app_header(title: str, subtitle: str = ""):
+    st.markdown(
+        f"""
+        <div class="fixool-app-header">
+          <div class="fixool-wordmark">FIXOOL<span class="dot">.</span></div>
+          <h1>{title}</h1>
+          <p>{subtitle or BRAND_PAYOFF}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def get_app_secret(key: str, default: str = "") -> str:
     """Read a secret from Streamlit secrets, then environment, then default."""
     try:
@@ -205,8 +331,16 @@ def require_password() -> bool:
     if st.session_state.get("fixool_authenticated"):
         return True
 
-    st.title("🏗️ Fixool Site OS Light")
-    st.subheader("Accesso pilota")
+    st.markdown(
+        f"""
+        <div class="fixool-login-card">
+          <div class="fixool-login-mark">FIXOOL<span>.</span></div>
+          <div class="fixool-login-title">Accesso a Fixool OS</div>
+          <div class="fixool-login-subtitle">Coordinamento cantieri, avanzamento lavori e report cliente.</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     st.caption("Inserisci la password condivisa dal team Fixool.")
     with st.form("login_form"):
         password = st.text_input("Password", type="password")
@@ -1338,7 +1472,7 @@ def make_client_predefined_reports(cantiere_id):
             lines.append(f"- {row.get(col)}{pct}")
         return "\n".join(lines)
 
-    header = f"Cantiere: {cantiere['nome']}\nData aggiornamento: {date.today().strftime('%d/%m/%Y')}"
+    header = f"FIXOOL OS | Aggiornamento cliente\nCantiere: {cantiere['nome']}\nCliente: {cantiere['cliente'] or '-'}\nData aggiornamento: {date.today().strftime('%d/%m/%Y')}"
     avanzamento = f"""REPORT AVANZAMENTO CANTIERE
 
 {header}
@@ -1412,7 +1546,9 @@ Stato: {status_budget}
 {bullet(tickets_cliente, max_items=6)}
 
 Messaggio Fixool:
-Il cantiere è presidiato con aggiornamento strutturato di avanzamento, budget e prossime attività. Eventuali decisioni richieste saranno condivise in modo puntuale.
+Il cantiere è presidiato con metodo Fixool: avanzamento lavori, budget e prossime attività sono monitorati in modo strutturato. Eventuali decisioni richieste saranno condivise in modo puntuale.
+
+{BRAND_FOOTER}
 """
     return {
         "Avanzamento cantiere": avanzamento,
@@ -1426,8 +1562,9 @@ def page_area_cliente():
     st.markdown(
         """
         <div class="client-hero">
-          <h1>🏡 Area Cliente</h1>
-          <p>Report chiari e presentabili per comunicare avanzamento, budget e prossimi lavori senza trasferire il caos operativo interno.</p>
+          <div class="fixool-wordmark">FIXOOL<span class="dot">.</span></div>
+          <h1>Area Cliente</h1>
+          <p>Report chiari, eleganti e presentabili per condividere avanzamento, budget e prossimi lavori con il cliente.</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1543,7 +1680,7 @@ def page_area_cliente():
             """
         )
         reports = make_client_predefined_reports(cantiere_id)
-        st.text_area("Messaggio breve da inviare con il report", value=f"Ciao, ti inviamo l'aggiornamento del cantiere {cantiere['nome']} con avanzamento lavori, stato budget e prossimi passaggi.\n\n{reports['Report cliente completo']}", height=360)
+        st.text_area("Messaggio breve da inviare con il report", value=f"Ciao, ti inviamo l'aggiornamento Fixool del cantiere {cantiere['nome']} con avanzamento lavori, stato budget e prossimi passaggi.\n\n{reports['Report cliente completo']}", height=360)
 
 
 
@@ -1608,7 +1745,8 @@ def page_capo_cantiere():
     st.markdown(
         """
         <div class="fixool-hero">
-          <h1>👷 Vista capo cantiere</h1>
+          <div class="fixool-wordmark">FIXOOL<span class="dot">.</span></div>
+          <h1>Vista capo cantiere</h1>
           <p>Una schermata operativa unica: cosa controllare oggi, cosa aggiornare subito, cosa comunicare al cliente.</p>
         </div>
         """,
@@ -1777,7 +1915,7 @@ def page_capo_cantiere():
 
 
 def page_progetti():
-    st.header("Progetti")
+    render_app_header("Progetti", "Anagrafica, template, attività, ticket e report in un unico punto di governo.")
     st.caption(
         "Area unica per gestire il singolo progetto/cantiere: anagrafica, template operativo, attività, ticket e report. "
         "L'obiettivo è avere un unico punto di governo per capo cantiere e direzione Fixool."
@@ -1822,7 +1960,7 @@ def page_export():
 
 
 def page_settings():
-    st.header("Impostazioni pilota")
+    render_app_header("Impostazioni pilota", "Configurazione leggera per test, backup e personalizzazione brand.")
     st.warning("Usare con attenzione: queste azioni modificano il database locale.")
     uploaded_db = st.file_uploader("Ripristina backup database (.db)", type=["db", "sqlite", "sqlite3"])
     if uploaded_db is not None and st.button("Carica backup e sostituisci database attuale"):
@@ -1830,6 +1968,9 @@ def page_settings():
         DB_PATH.write_bytes(uploaded_db.getbuffer())
         st.success("Backup ripristinato. Ricarico l'app.")
         st.rerun()
+    st.markdown("---")
+    st.subheader("Branding Fixool")
+    st.info("La V9 usa un wordmark testuale FIXOOL. Per inserire il logo ufficiale, in Streamlit Cloud puoi aggiungere nei Secrets: FIXOOL_LOGO_URL = \"https://link-al-logo.png\". Poi riavvia l'app.")
     st.markdown("---")
     if st.button("Carica dati demo", type="secondary"):
         seed_demo_data()
@@ -1845,15 +1986,15 @@ def page_settings():
 
 
 def main():
+    apply_ui_styles()
     if not require_password():
         return
     init_db()
-    apply_ui_styles()
     if "initialized" not in st.session_state:
         seed_demo_data()
         st.session_state["initialized"] = True
-    st.sidebar.title("🏗️ Fixool Site OS Light")
-    st.sidebar.caption("MVP cloud-ready per coordinamento cantieri - Patch V8")
+    render_sidebar_brand()
+    st.sidebar.caption("Patch V9 · Branding & UI cliente")
     st.sidebar.caption(f"Database: {DB_PATH.name}")
     page = st.sidebar.radio(
         "Menu",
