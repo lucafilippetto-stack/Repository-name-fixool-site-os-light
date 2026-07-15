@@ -623,11 +623,11 @@ def insert_template_activities(cantiere_id, template_name, start_date):
 
 
 def page_template_cantiere():
-    st.header("Template cantiere")
+    st.header("Template progetto / cantiere")
     st.caption("Crea rapidamente le attività standard di un cantiere Fixool. Serve a rendere il metodo replicabile e ridurre dimenticanze operative.")
     cantieri_map = get_cantieri_options()
     if not cantieri_map:
-        st.info("Crea prima un cantiere nella sezione Cantieri.")
+        st.info("Crea prima un progetto nella sezione Progetti.")
         return
     selected = st.selectbox("Cantiere", list(cantieri_map.keys()), key="template_cantiere")
     cantiere_id = cantieri_map[selected]
@@ -730,7 +730,7 @@ def page_dashboard():
 
 
 def page_cantieri():
-    st.header("Cantieri")
+    st.header("Anagrafica progetti / cantieri")
     with st.expander("Crea nuovo cantiere", expanded=True):
         with st.form("new_cantiere"):
             col1, col2 = st.columns(2)
@@ -755,7 +755,7 @@ def page_cantieri():
                 st.success("Cantiere creato.")
                 st.rerun()
 
-    st.subheader("Elenco cantieri")
+    st.subheader("Elenco progetti / cantieri")
     df = query_df("SELECT id, nome, cliente, indirizzo, capo_cantiere, stato, data_inizio, data_fine_prevista FROM cantieri ORDER BY created_at DESC")
     st.dataframe(df, use_container_width=True, hide_index=True)
 
@@ -786,10 +786,10 @@ def page_artigiani():
 
 
 def page_attivita():
-    st.header("Attività di cantiere")
+    st.header("Attività di progetto / cantiere")
     cantieri_map = get_cantieri_options()
     if not cantieri_map:
-        st.info("Crea prima un cantiere.")
+        st.info("Crea prima un progetto/cantiere.")
         return
     selected = st.selectbox("Cantiere", list(cantieri_map.keys()))
     cantiere_id = cantieri_map[selected]
@@ -860,7 +860,7 @@ def page_ticket():
     st.header("Ticket, blocchi e richieste")
     cantieri_map = get_cantieri_options()
     if not cantieri_map:
-        st.info("Crea prima un cantiere.")
+        st.info("Crea prima un progetto/cantiere.")
         return
     selected = st.selectbox("Cantiere", list(cantieri_map.keys()), key="ticket_cantiere")
     cantiere_id = cantieri_map[selected]
@@ -1067,10 +1067,10 @@ Fixool sta presidiando le attività aperte per mantenere il corretto avanzamento
 
 
 def page_report():
-    st.header("Report giornaliero")
+    st.header("Report progetto / cantiere")
     cantieri_map = get_cantieri_options()
     if not cantieri_map:
-        st.info("Crea prima un cantiere.")
+        st.info("Crea prima un progetto/cantiere.")
         return
     selected = st.selectbox("Cantiere", list(cantieri_map.keys()), key="report_cantiere")
     cantiere_id = cantieri_map[selected]
@@ -1082,6 +1082,36 @@ def page_report():
         st.text_area("Copia e incolla su WhatsApp / email interna", value=report, height=520)
     with tab2:
         st.text_area("Versione pulita per cliente", value=client_report, height=420)
+
+
+def page_progetti():
+    st.header("Progetti")
+    st.caption(
+        "Area unica per gestire il singolo progetto/cantiere: anagrafica, template operativo, attività, ticket e report. "
+        "L'obiettivo è avere un unico punto di governo per capo cantiere e direzione Fixool."
+    )
+    area = st.radio(
+        "Area progetto",
+        [
+            "Anagrafica progetto",
+            "Template operativo",
+            "Attività",
+            "Ticket / Assistente",
+            "Report interno / cliente",
+        ],
+        horizontal=True,
+    )
+    st.markdown("---")
+    if area == "Anagrafica progetto":
+        page_cantieri()
+    elif area == "Template operativo":
+        page_template_cantiere()
+    elif area == "Attività":
+        page_attivita()
+    elif area == "Ticket / Assistente":
+        page_ticket()
+    elif area == "Report interno / cliente":
+        page_report()
 
 
 def page_export():
@@ -1130,18 +1160,14 @@ def main():
         seed_demo_data()
         st.session_state["initialized"] = True
     st.sidebar.title("🏗️ Fixool Site OS Light")
-    st.sidebar.caption("MVP cloud-ready per coordinamento cantieri - Patch V5")
+    st.sidebar.caption("MVP cloud-ready per coordinamento cantieri - Patch V6")
     st.sidebar.caption(f"Database: {DB_PATH.name}")
     page = st.sidebar.radio(
         "Menu",
         [
             "Dashboard",
-            "Cantieri",
-            "Artigiani",
-            "Template cantiere",
-            "Attività",
-            "Ticket / Assistente",
-            "Report giornaliero",
+            "Progetti",
+            "Artigiani / Squadre",
             "Export",
             "Impostazioni",
         ],
@@ -1152,18 +1178,10 @@ def main():
 
     if page == "Dashboard":
         page_dashboard()
-    elif page == "Cantieri":
-        page_cantieri()
-    elif page == "Artigiani":
+    elif page == "Progetti":
+        page_progetti()
+    elif page == "Artigiani / Squadre":
         page_artigiani()
-    elif page == "Template cantiere":
-        page_template_cantiere()
-    elif page == "Attività":
-        page_attivita()
-    elif page == "Ticket / Assistente":
-        page_ticket()
-    elif page == "Report giornaliero":
-        page_report()
     elif page == "Export":
         page_export()
     elif page == "Impostazioni":
